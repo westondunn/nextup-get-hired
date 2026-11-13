@@ -61,3 +61,12 @@ def _fresh_settings():
     get_settings.cache_clear()
     yield
     get_settings.cache_clear()
+
+
+@pytest.fixture(autouse=True)
+def _test_client_host(monkeypatch):
+    # Starlette's TestClient sends "Host: testserver". The request boundary accepts that
+    # name only here; it is never on the list in a running service.
+    from app import request_boundary
+
+    monkeypatch.setattr(request_boundary, "TEST_HOSTS", frozenset({"testserver"}))

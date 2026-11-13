@@ -20,7 +20,7 @@ Google account authorization does not help with any of these. It proves to Googl
 
 | Path | `Host` header the API sees | Evidence |
 | --- | --- | --- |
-| Browser to the web interface, which proxies `/api` | The browser's host, for example `127.0.0.1:15173`. The Vite proxy does not rewrite it | `frontend/vite.config.ts`, `compose.dev.yaml` |
+| Browser to the web interface, which proxies `/api` | The browser's host, for example `127.0.0.1:15173`, once the proxy sets `changeOrigin: false` (see the correction below) | `frontend/vite.config.ts`, `compose.dev.yaml` |
 | Browser or tool directly to the published API port | `127.0.0.1:18000` or `localhost:18000` | `compose.dev.yaml`, `compose.staging.yaml` |
 | Container health check | `127.0.0.1:8000` | `compose.base.yaml` |
 | CI browser tests | `frontend:5173` | `compose.ci.yaml` |
@@ -57,7 +57,9 @@ For `POST`, `PUT`, `PATCH` and `DELETE`, the API refuses a request when either o
 
 A request with neither header is treated as coming from a non-browser client and passes this layer. This is the Fetch Metadata approach described in the [OWASP CSRF prevention cheat sheet][owasp-csrf] and uses the [`Sec-Fetch-Site`][mdn-sfs] header that current browsers send on every request. It needs no token, so nothing is stored in the browser and the four frontend API modules do not change.
 
-It depends on the Vite proxy passing the browser's `Host` header through unchanged, which is its default. The implementation must include a test that fails if that changes.
+It depends on the Vite proxy passing the browser's `Host` header through unchanged. The implementation must include a test that fails if that changes.
+
+**Correction, 2026-11-13.** This record first said that passing `Host` through was the proxy's default. That was wrong for the configuration in use: when a proxy target is written as a plain string, Vite sets `changeOrigin: true` and sends the target's host name (`api:8000`) instead. It was found by running the implementation against the development stack, where every proxied request was refused by layer 1. The proxy is therefore configured as an object with `changeOrigin: false`, and a frontend test guards that setting. The decision itself is unchanged.
 
 The implementation must also confirm that no `GET` route changes state. Any that does becomes a `POST` first.
 
