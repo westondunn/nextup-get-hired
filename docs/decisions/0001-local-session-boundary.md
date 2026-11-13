@@ -1,8 +1,8 @@
 # 0001 — Local request boundary for the API
 
-- **Status:** Proposed. Nothing described here is implemented.
+- **Status:** Accepted by the maintainer on 2026-11-13. Nothing described here is implemented yet.
 - **Date:** 2026-11-13, written against commit `3d02615`.
-- **Tracking:** decision [#7](https://github.com/westondunn/nextup-get-hired/issues/7); implementation [#8](https://github.com/westondunn/nextup-get-hired/issues/8); part of [#3](https://github.com/westondunn/nextup-get-hired/issues/3).
+- **Tracking:** decision [#7](https://github.com/westondunn/nextup-get-hired/issues/7); implementation [#8](https://github.com/westondunn/nextup-get-hired/issues/8) (layers 1 and 2) and [#18](https://github.com/westondunn/nextup-get-hired/issues/18) (layer 3); part of [#3](https://github.com/westondunn/nextup-get-hired/issues/3).
 
 ## Context
 
@@ -67,8 +67,8 @@ Layers 1 and 2 stop browser-based attacks but not another local process. Routes 
 
 - The launcher generates a setup code as a file under `.secrets/<env>/`, in the same way it generates database passwords. It never prints the code.
 - The user reads the file and enters the code once in Settings. The API compares it in constant time and issues a session.
-- The session is a random identifier in a cookie marked `HttpOnly`, `SameSite=Strict` and `Path=/api`. Only a hash of the identifier is stored server-side.
-- Sessions expire, and the user can end one from Settings.
+- The session is a random identifier in a cookie marked `HttpOnly`, `SameSite=Strict` and `Path=/api`. Only a hash of the identifier is stored, in a database table.
+- A session ends after 12 hours of inactivity and after 7 days at most. The user can end one from Settings.
 
 Routes in scope when layer 3 first ships:
 
@@ -108,19 +108,23 @@ Messages and log lines are value-free: they never include a header value, the se
 
 ## Implementation slices
 
-This is larger than one reviewable change. [#8](https://github.com/westondunn/nextup-get-hired/issues/8) should be split when this record is accepted:
+This is larger than one reviewable change, so it is tracked as two issues:
 
-1. **Layers 1 and 2** on all routes. No user-visible change, no migration. Tests for each refusal, for every access path in the table above, and for the proxy assumption.
-2. **Layer 3**: setup code in the launcher, session routes, the Settings prompt with accessibility coverage, and protection of the two correspondence routes. A new `oss_NNNN` migration if sessions are stored in the database.
+1. **Layers 1 and 2** on all routes ([#8](https://github.com/westondunn/nextup-get-hired/issues/8)). No user-visible change, no migration. Tests for each refusal, for every access path in the table above, and for the proxy assumption.
+2. **Layer 3** ([#18](https://github.com/westondunn/nextup-get-hired/issues/18)): setup code in the launcher, session routes, the Settings prompt with accessibility coverage, and protection of the two correspondence routes. A new `oss_NNNN` migration for the session table.
 
 The Google connection work depends on both.
 
-## Open questions for the maintainer
+## Decisions on the questions raised in review
 
-1. **Session storage.** A database table (survives restarts, needs a new `oss_NNNN` migration) or API process memory (no migration, but the user re-enters the code after every restart)? Proposed: database table.
-2. **Session lifetime.** Proposed: 12 hours of inactivity, 7 days at most.
-3. **Scope of layer 3.** Should data export, seed import or retention routes also require a session? Proposed: not in the first slice.
-4. **Staging.** Same rules as development? Proposed: yes, with no additional host names.
+The maintainer accepted the proposed answers on 2026-11-13.
+
+| Question | Decision |
+| --- | --- |
+| Session storage | A database table, added by a new `oss_NNNN` migration. Sessions survive a restart |
+| Session lifetime | 12 hours of inactivity, 7 days at most |
+| Scope of layer 3 | The two correspondence routes and the Google connection routes only. Export, seed import and retention routes are not included in the first slice |
+| Staging | Same rules as development, with no additional host names |
 
 ## References
 
