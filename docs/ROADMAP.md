@@ -56,7 +56,7 @@ Branch names below are suggestions that follow the [branching guide](BRANCHING.m
 - [ ] **Outcome: requests to a non-local host name and cross-origin state-changing requests are refused**
   - Tracking: [#8](https://github.com/westondunn/nextup-get-hired/issues/8)
   - Priority and dependencies: P0; blocked by [#7](https://github.com/westondunn/nextup-get-hired/issues/7)
-  - Suggested branch: `feature/8-local-request-boundary`
+  - Suggested branch: `feature/8-local-request-boundary` (used as suggested)
   - Contributor notes: `backend/app/main.py` and a new backend module; no frontend change; loopback-only publication does not change
   - Contribution availability: maintainer-only
   - Complete when: each refusal path and each access path is tested and the full verification passes

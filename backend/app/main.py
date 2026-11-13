@@ -26,6 +26,7 @@ from app.job_ratings import router as job_ratings_router
 from app.jobs import router as jobs_router
 from app.models import DiagnosticRun
 from app.profiles import router as profile_router
+from app.request_boundary import RequestBoundaryMiddleware
 from app.retention import router as retention_router
 from app.saved_searches import router as saved_search_router
 from app.schemas import DiagnosticOut
@@ -42,6 +43,8 @@ async def lifespan(_app):
 
 
 app = FastAPI(title="Nextup", version="0.2.0", lifespan=lifespan)
+# Host allowlist and cross-origin refusal; see docs/decisions/0001-local-session-boundary.md.
+app.add_middleware(RequestBoundaryMiddleware)
 app.include_router(profile_router)
 app.include_router(jobs_router)
 app.include_router(job_ratings_router)
