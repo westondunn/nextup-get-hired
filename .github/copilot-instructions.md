@@ -62,7 +62,11 @@ confirmation.
 ## Repository-specific constraints
 
 - The API has no authentication. Preserve loopback-only port publishing; never expose it to
-  a network.
+  a network. `request_boundary.py` refuses non-local host names and cross-origin
+  state-changing requests, and `local_session.py` provides session routes that no route
+  requires yet; neither is authentication.
+- `docs/INTEGRATIONS.md` records implementation status and support status separately. Do
+  not describe a disabled or untested integration as supported.
 - Keep tests synthetic. `backend/tests/conftest.py` isolates developer configuration and
   installs a synthetic test identity. Integration tests require the disposable verification
   stack and are not ordinary host-side unit tests.

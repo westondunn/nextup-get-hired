@@ -2,6 +2,8 @@
 
 NextUp is a self-hosted application for organising a job search. It runs on your own machine and keeps your data in your own database.
 
+The workspace is meant to be useful on its own. Connecting a mailbox, a calendar or an AI service is optional, and the aim is that you choose your own tools instead of adopting a particular provider or subscription. None of those connections can be enabled yet: [integrations and compatibility](docs/INTEGRATIONS.md) records what exists and what has been tested, and [decision 0002](docs/decisions/0002-standards-first-interoperability.md) records the direction.
+
 > **Status: pre-release, under active development.** NextUp is not ready for production use. Installation instructions, first-run onboarding and public release validation are still in progress, and no platform is supported yet. [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) describes the existing tooling and what has been tested.
 
 ## What it is for
@@ -24,10 +26,12 @@ It is designed for one person running their own instance. It is not a hosted ser
 | Core application (backend, worker, frontend) | Implemented; under test |
 | Database migration safeguards | Implemented; runtime validation in progress |
 | Portable installation (Linux, macOS, Windows) | In progress; no platform is supported yet. Verification has been run on Linux with Docker only |
-| First-run onboarding | Planned |
-| External integrations (job-board feeds, read-only mail and calendar sync) | Present in the code; switched off in every shipped configuration; no supported way to enable them yet |
-| Authentication | None. The API is unauthenticated, and the development configuration publishes ports on the loopback interface only. Do not expose it to a network |
-| Documentation | Being rewritten. Current documents: this README, [development notes](docs/DEVELOPMENT.md), the [optional external classifier interface](docs/CORRESPONDENCE_SYNC.md), the [roadmap](docs/ROADMAP.md), the [release checklist](docs/RELEASE_CHECKLIST.md) and the [security policy](SECURITY.md) |
+| First-run onboarding | Planned; no guided setup exists |
+| External integrations (job-board feeds, read-only mail and calendar sync) | Present in the code; switched off in every shipped configuration; no supported way to enable them yet. None has a support status; see [integrations and compatibility](docs/INTEGRATIONS.md) |
+| Other mail and calendar providers | Not implemented; under evaluation, with no commitment to a provider or protocol |
+| Optional AI assistance | Not implemented; planned as an explicit opt-in |
+| Authentication | None. The API is unauthenticated, and the shipped configurations publish ports on the loopback interface only. Do not expose it to a network. The API refuses requests that are not addressed to `localhost` or `127.0.0.1` and cross-site state-changing requests; that is not authentication |
+| Documentation | Being rewritten. Current documents: this README, [development notes](docs/DEVELOPMENT.md), the [optional external classifier interface](docs/CORRESPONDENCE_SYNC.md), [integrations and compatibility](docs/INTEGRATIONS.md), the [decision records](docs/decisions/), the [roadmap](docs/ROADMAP.md), the [release checklist](docs/RELEASE_CHECKLIST.md) and the [security policy](SECURITY.md) |
 | Release validation | In progress |
 
 Expect breaking changes, including to configuration and data formats, before a first release.

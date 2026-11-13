@@ -6,6 +6,8 @@ NextUp is pre-release software and is not ready for production use.
 
 - The API has no authentication. The shipped configurations publish ports on the loopback interface only. Do not expose NextUp to a network.
 - The API accepts only requests addressed to `localhost` or `127.0.0.1`, and refuses state-changing requests that a browser reports as coming from another site. This limits what a web page open in your browser can do to a local instance. It is not authentication: any program running on the same machine can still call the API.
+- Local-session routes exist (`/api/session`), but no route requires a session yet, so they protect nothing at present.
+- Connecting a Google account, once that is possible, authorizes NextUp to read from Google. It is not a login to NextUp and does not protect the API.
 - The database safeguards (separate roles, the migration guard) are still being validated and should not be relied on yet.
 - Only the newest state of the main branch is maintained. There are no security updates for older versions.
 
