@@ -2,13 +2,13 @@
 
 These are the gates that must be met before NextUp's integrations are described as publicly supported. A gate is checked only when the evidence is linked next to it. A merged pull request or a closed issue is not evidence on its own.
 
-**Snapshot date: 2026-11-13, taken at commit `4bbff43`.** No gate is met yet. The ordered work is in the [roadmap](ROADMAP.md); scope and acceptance criteria are in the linked issues.
+**Snapshot date: 2026-11-13, last reconciled at commit `baf9028`.** One gate is met; the rest are open. The ordered work is in the [roadmap](ROADMAP.md); scope and acceptance criteria are in the linked issues.
 
 ## Safety baseline
 
 - [ ] The default application works with no external service, model credential or integration configured. Evidence: pending.
 - [ ] Every shipped configuration publishes ports on the loopback interface only. Evidence: pending.
-- [ ] Requests to a non-local host name and cross-origin state-changing requests are refused ([#8](https://github.com/westondunn/nextup-get-hired/issues/8)). Evidence: pending.
+- [x] Requests to a non-local host name and cross-origin state-changing requests are refused ([#8](https://github.com/westondunn/nextup-get-hired/issues/8)). Evidence: merged in [#20](https://github.com/westondunn/nextup-get-hired/pull/20) as `baf9028`; [hosted CI run on `main`](https://github.com/westondunn/nextup-get-hired/actions/runs/43509731795), which includes the integration, browser and secret-audit checks; local probes of the development stack are recorded in the pull request.
 - [ ] Integration and credential routes require a local session ([#18](https://github.com/westondunn/nextup-get-hired/issues/18)). Evidence: pending.
 - [ ] `SECURITY.md` states the authentication limits as they are at the release commit. Evidence: pending.
 - [ ] Pinned migration history is unchanged and every schema change is a new revision applied through the guard. Evidence: pending.

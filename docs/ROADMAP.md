@@ -2,7 +2,7 @@
 
 This page lists the planned integration outcomes in order. It is public planning for a pre-release project. Outside contributions are not being accepted yet (see the [README](../README.md#development-and-contributions)), so nothing here is an invitation to start work.
 
-**Snapshot date: 2026-11-13, last reconciled at commit `6da6061`.** Status, scope and acceptance criteria live in the linked issues; where this page and an issue disagree, the issue is right. The parent tracking issue is [#3](https://github.com/westondunn/nextup-get-hired/issues/3). There is no GitHub Project for this repository.
+**Snapshot date: 2026-11-13, last reconciled at commit `baf9028`.** Status, scope and acceptance criteria live in the linked issues; where this page and an issue disagree, the issue is right. The parent tracking issue is [#3](https://github.com/westondunn/nextup-get-hired/issues/3). There is no GitHub Project for this repository.
 
 An outcome is checked only when its completion gate is met and the evidence is linked. A branch, an open pull request or a closed issue does not check it. Readiness gates for a public release are in the [release checklist](RELEASE_CHECKLIST.md).
 
@@ -53,14 +53,14 @@ Branch names below are suggestions that follow the [branching guide](BRANCHING.m
   - Complete when: the decision record is reviewed and merged
   - Evidence: [decisions/0001-local-session-boundary.md](decisions/0001-local-session-boundary.md), merged in [#17](https://github.com/westondunn/nextup-get-hired/pull/17) as `6da6061` and accepted by the maintainer on 2026-11-13
 
-- [ ] **Outcome: requests to a non-local host name and cross-origin state-changing requests are refused**
+- [x] **Outcome: requests to a non-local host name and cross-origin state-changing requests are refused**
   - Tracking: [#8](https://github.com/westondunn/nextup-get-hired/issues/8)
   - Priority and dependencies: P0; blocked by [#7](https://github.com/westondunn/nextup-get-hired/issues/7)
   - Suggested branch: `feature/8-local-request-boundary` (used as suggested)
   - Contributor notes: `backend/app/main.py` and a new backend module; no frontend change; loopback-only publication does not change
   - Contribution availability: maintainer-only
   - Complete when: each refusal path and each access path is tested and the full verification passes
-  - Evidence: pending
+  - Evidence: merged in [#20](https://github.com/westondunn/nextup-get-hired/pull/20) as `baf9028`; [hosted CI run on `main`](https://github.com/westondunn/nextup-get-hired/actions/runs/43509731795), which includes the integration, browser and secret-audit checks; local probes of the development stack are recorded in the pull request
 
 - [ ] **Outcome: integration and credential routes require a local session**
   - Tracking: [#18](https://github.com/westondunn/nextup-get-hired/issues/18)
