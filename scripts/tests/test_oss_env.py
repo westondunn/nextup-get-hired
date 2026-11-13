@@ -185,7 +185,16 @@ class RenderedEnvironments(unittest.TestCase):
             services = oss_env.static_config(env, variables(env))["services"]
             for name in ("api", "worker", "scheduler"):
                 service = services[name]
-                self.assertEqual(service["secrets"], ["db_app_password"], name)
+                # Only the api also receives the local-session setup code.
+                expected = (
+                    ["db_app_password", "setup_code"] if name == "api" else ["db_app_password"]
+                )
+                self.assertEqual(service["secrets"], expected, name)
+                self.assertEqual(
+                    service["environment"].get("NEXTUP_SETUP_CODE_FILE"),
+                    "/run/secrets/setup_code" if name == "api" else None,
+                    name,
+                )
                 self.assertEqual(service["environment"]["NEXTUP_DB_USER"], env.role("app"))
                 for key in service["environment"]:
                     self.assertFalse(key.startswith(("NEXTUP_MIGRATION", "POSTGRES_")), (name, key))
