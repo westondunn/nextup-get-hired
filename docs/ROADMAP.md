@@ -51,7 +51,7 @@ Branch names below are suggestions that follow the [branching guide](BRANCHING.m
   - Contributor notes: decision record under `docs/`; browser security for local services
   - Contribution availability: maintainer-only
   - Complete when: the decision record is reviewed and merged
-  - Evidence: pending
+  - Evidence: pending; proposed record at [decisions/0001-local-session-boundary.md](decisions/0001-local-session-boundary.md), not yet accepted
 
 - [ ] **Outcome: credential-related and state-changing requests are refused outside the local session boundary**
   - Tracking: [#8](https://github.com/westondunn/nextup-get-hired/issues/8)
