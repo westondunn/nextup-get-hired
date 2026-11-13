@@ -2,14 +2,20 @@ name: Nextup CI
 
 on:
   pull_request:
+    types:
+      - opened
+      - synchronize
+      - reopened
   push:
+    branches:
+      - '**'
   workflow_dispatch:
 
 permissions:
   contents: read
 
 concurrency:
-  group: nextup-ci-${{ github.workflow }}-${{ github.ref }}
+  group: nextup-ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
