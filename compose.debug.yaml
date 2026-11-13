@@ -1,0 +1,18 @@
+# Optional dev-only debug overlay; never combine it with staging. Use:
+#   python3 scripts/local.py --env dev debug
+# debugpy listens inside the containers; the host side is loopback-only on ports that
+# no other stack uses. VS Code attaches with the "attach" configurations, which never
+# start services themselves.
+services:
+  api:
+    command: [python, -m, debugpy, --listen, '0.0.0.0:5678', -m, uvicorn, app.main:app, --host, '0.0.0.0', --port, '8000']
+    ports:
+      - 127.0.0.1:15678:5678
+    volumes:
+      - ./backend/app:/app/app:ro
+  worker:
+    command: [python, -m, debugpy, --listen, '0.0.0.0:5679', -m, celery, -A, app.celery_app:celery_app, worker, --loglevel=INFO, --pool=solo, --hostname=worker@%h]
+    ports:
+      - 127.0.0.1:15679:5679
+    volumes:
+      - ./backend/app:/app/app:ro

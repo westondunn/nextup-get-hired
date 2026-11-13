@@ -1,0 +1,125 @@
+# Shared Nextup OSS service definitions. Never use this file alone: run
+# `python3 scripts/local.py --env dev|staging <action>`, which adds exactly one
+# environment overlay. Identity (project, image, volume, database and role names),
+# host ports and secrets live only in the overlays.
+#
+# Credentials: three database roles per environment.
+#   *_admin  bootstrap superuser; its secret is mounted into postgres only
+#   *_owner  schema owner and migrator; its secret is mounted into postgres and migrate only
+#   *_app    runtime DML only; its secret is mounted into postgres, api, worker, scheduler
+# Secrets are Compose `secrets:` read from files; containers receive only *_FILE paths,
+# so no value appears in a rendered configuration or in the container environment.
+x-backend: &backend
+  build: ./backend
+  init: true
+  environment: &backend-env
+    NEXTUP_DB_HOST: postgres
+    NEXTUP_DB_PORT: '5432'
+    NEXTUP_REDIS_URL: redis://redis:6379/0
+    # Every external integration is off in shared definitions and has no credentials.
+    NEXTUP_FIXTURE_DATA_MODE: 'false'
+    NEXTUP_GMAIL_SYNC_ENABLED: 'false'
+    NEXTUP_CALENDAR_SYNC_ENABLED: 'false'
+    NEXTUP_LIVE_JOB_FETCH_ENABLED: 'false'
+    NEXTUP_EXTERNAL_CLASSIFIER_ENABLED: 'false'
+
+# Startup waits only for healthy data services. It never waits for, or runs, migrations.
+x-ready: &ready
+  postgres:
+    condition: service_healthy
+  redis:
+    condition: service_healthy
+
+services:
+  postgres:
+    image: postgres:17-bookworm
+    # Root phase: copy only the owner and app passwords into a postgres-owned tmpfs so the
+    # first-boot script (which runs as the postgres user) can read them, then hand over to
+    # the image's own entrypoint. The admin password is read by that entrypoint itself
+    # (POSTGRES_PASSWORD_FILE, while still root). Nothing is echoed.
+    entrypoint:
+      - /bin/sh
+      - -ec
+      - |
+        install -d -m 0700 -o postgres -g postgres /run/nextup-initdb
+        for name in db_owner_password db_app_password; do
+          install -m 0400 -o postgres -g postgres "/run/secrets/$$name" "/run/nextup-initdb/$$name"
+        done
+        exec docker-entrypoint.sh "$$@"
+      - nextup-initdb-wrapper
+    tmpfs:
+      - /run/nextup-initdb:mode=0700,size=65536
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./backend/docker/initdb:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      # The bootstrap server accepts Unix sockets before the final TCP server starts.
+      test: [CMD-SHELL, 'pg_isready -h 127.0.0.1 -U "$${POSTGRES_USER}" -d "$${POSTGRES_DB}"']
+      interval: 5s
+      timeout: 3s
+      retries: 12
+  redis:
+    image: redis:7.4-bookworm
+    command: [redis-server, --appendonly, 'yes']
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: [CMD, redis-cli, ping]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+  # Never started by `up`: behind the `migrate` profile, nothing depends on it, and its only
+  # entrypoint is the guard. The default command is the read-only plan; `plan-apply` applies
+  # after the operator confirms the shown code (python3 scripts/local.py --env dev migrate).
+  migrate:
+    <<: *backend
+    profiles: [migrate]
+    entrypoint: [python, -m, app.guard]
+    command: [plan]
+    restart: 'no'
+    depends_on:
+      postgres:
+        condition: service_healthy
+  api:
+    <<: *backend
+    depends_on: *ready
+    healthcheck:
+      test: [CMD, python, -c, "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/live', timeout=3)"]
+      interval: 5s
+      timeout: 4s
+      retries: 12
+  worker:
+    <<: *backend
+    command: [celery, -A, app.celery_app:celery_app, worker, --loglevel=INFO, --concurrency=1, --hostname=worker@%h]
+    depends_on: *ready
+    healthcheck:
+      test: [CMD-SHELL, 'celery -A app.celery_app:celery_app inspect ping --destination "worker@$${HOSTNAME}" --timeout 3']
+      interval: 15s
+      timeout: 8s
+      retries: 4
+      start_period: 10s
+  scheduler:
+    <<: *backend
+    command: [celery, -A, app.celery_app:celery_app, beat, --loglevel=INFO, --schedule=/state/celerybeat-schedule]
+    depends_on: *ready
+    volumes:
+      - scheduler-data:/state
+  frontend:
+    build: ./frontend
+    init: true
+    environment:
+      API_PROXY_TARGET: http://api:8000
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test: [CMD, node, -e, "fetch('http://127.0.0.1:5173').then(r => {if (!r.ok) process.exit(1)}).catch(() => process.exit(1))"]
+      interval: 5s
+      timeout: 4s
+      retries: 12
+
+# Names are set by each overlay; a volume without an overlay name fails validation.
+volumes:
+  postgres-data: {}
+  redis-data: {}
+  scheduler-data: {}

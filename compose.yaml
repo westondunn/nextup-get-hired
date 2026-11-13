@@ -1,0 +1,8 @@
+# Tripwire. Plain `docker compose ...` in this directory loads this file and must fail,
+# because an implicit project could attach to another stack's containers or volumes.
+# Select an environment explicitly instead:
+#   python3 scripts/local.py --env dev <doctor|start|debug|status|stop>
+# The real definitions are compose.base.yaml plus compose.dev.yaml or compose.staging.yaml;
+# compose.ci.yaml is used only by scripts/verify_ci.py in a random disposable project.
+name: ${NEXTUP_RAW_COMPOSE_IS_DISABLED:?Raw docker compose is disabled here. Use python3 scripts/local.py --env dev ACTION}
+services: {}

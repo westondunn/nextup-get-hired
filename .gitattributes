@@ -1,0 +1,59 @@
+# Line-ending and content rules. They apply to every clone regardless of the
+# contributor's core.autocrlf or core.eol setting.
+
+# Default: detect text, store it with LF, and check it out with LF on every platform.
+* text=auto eol=lf
+
+# Source and configuration: always text, always LF.
+*.py text eol=lf
+*.sh text eol=lf
+*.ts text eol=lf
+*.tsx text eol=lf
+*.css text eol=lf
+*.html text eol=lf
+*.json text eol=lf
+*.yaml text eol=lf
+*.yml text eol=lf
+*.toml text eol=lf
+*.ini text eol=lf
+*.mako text eol=lf
+*.md text eol=lf
+*.example text eol=lf
+*.lock text eol=lf
+Dockerfile text eol=lf
+Dockerfile.* text eol=lf
+.dockerignore text eol=lf
+.gitattributes text eol=lf
+.gitignore text eol=lf
+.prettierignore text eol=lf
+
+# Windows-only script types need CRLF. None exist yet; the rules prevent a wrong default.
+*.bat text eol=crlf
+*.cmd text eol=crlf
+*.ps1 text eol=crlf
+
+# Binary content is never converted or diffed as text. None exists yet.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.webp binary
+*.pdf binary
+*.woff binary
+*.woff2 binary
+*.ttf binary
+*.zip binary
+*.gz binary
+
+# Generated dependency locks: collapsed in diffs on hosting sites.
+backend/uv.lock linguist-generated=true
+frontend/package-lock.json linguist-generated=true
+
+# Migration revisions are pinned by SHA-256 of their exact bytes
+# (backend/migrations/LINEAGE.sha256), and the migration guard refuses to run when a
+# byte differs. Git must therefore never convert them in either direction. These rules
+# come last so that they override the *.py rule above. Do not "fix" line endings in
+# these files: any change, including whitespace, breaks the pin.
+backend/migrations/versions/*.py -text
+backend/migrations/LINEAGE.sha256 -text

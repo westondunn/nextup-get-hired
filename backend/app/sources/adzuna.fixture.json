@@ -1,0 +1,22 @@
+{
+  "results": [
+    {
+      "id": "test-qa-director",
+      "title": "Director of <strong>Quality Engineering</strong>",
+      "company": {"display_name": "Example Fintech — synthetic"},
+      "location": {"display_name": "Example City"},
+      "description": "Synthetic demonstration listing. Lead quality engineering and test automation with Python. This is not a real vacancy.",
+      "redirect_url": "https://example.invalid/jobs/test-qa-director",
+      "created": "2026-10-01T12:00:00Z"
+    },
+    {
+      "id": "test-head-qa",
+      "title": "Head of QA",
+      "company": {"display_name": "Example Software — synthetic"},
+      "location": {"display_name": "Example City / Remote"},
+      "description": "Synthetic demonstration listing. Build a quality strategy and support an automation team. This is not a real vacancy.",
+      "redirect_url": "https://example.invalid/jobs/test-head-qa",
+      "created": "2026-10-02T12:00:00Z"
+    }
+  ]
+}

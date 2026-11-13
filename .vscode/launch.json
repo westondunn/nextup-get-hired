@@ -1,0 +1,28 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Python: attach API in OSS dev (start the debug task first)",
+      "type": "debugpy",
+      "request": "attach",
+      "connect": { "host": "127.0.0.1", "port": 15678 },
+      "pathMappings": [{ "localRoot": "${workspaceFolder}/backend", "remoteRoot": "/app" }],
+      "justMyCode": true
+    },
+    {
+      "name": "Python: attach Celery in OSS dev (start the debug task first)",
+      "type": "debugpy",
+      "request": "attach",
+      "connect": { "host": "127.0.0.1", "port": 15679 },
+      "pathMappings": [{ "localRoot": "${workspaceFolder}/backend", "remoteRoot": "/app" }],
+      "justMyCode": true
+    },
+    {
+      "name": "Browser: OSS dev frontend",
+      "type": "pwa-chrome",
+      "request": "launch",
+      "url": "http://127.0.0.1:15173",
+      "webRoot": "${workspaceFolder}/frontend"
+    }
+  ]
+}

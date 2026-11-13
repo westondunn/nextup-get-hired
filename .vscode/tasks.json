@@ -1,0 +1,73 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Nextup OSS dev: check prerequisites",
+      "type": "process",
+      "command": "python3",
+      "args": ["scripts/local.py", "--env", "dev", "doctor"],
+      "options": { "cwd": "${workspaceFolder}" },
+      "problemMatcher": []
+    },
+    {
+      "label": "Nextup OSS dev: start",
+      "type": "process",
+      "command": "python3",
+      "args": ["scripts/local.py", "--env", "dev", "start"],
+      "options": { "cwd": "${workspaceFolder}" },
+      "problemMatcher": []
+    },
+    {
+      "label": "Nextup OSS dev: start with debug ports",
+      "type": "process",
+      "command": "python3",
+      "args": ["scripts/local.py", "--env", "dev", "debug"],
+      "options": { "cwd": "${workspaceFolder}" },
+      "problemMatcher": []
+    },
+    {
+      "label": "Nextup OSS dev: status",
+      "type": "process",
+      "command": "python3",
+      "args": ["scripts/local.py", "--env", "dev", "status"],
+      "options": { "cwd": "${workspaceFolder}" },
+      "problemMatcher": []
+    },
+    {
+      "label": "Nextup OSS dev: stop (keep data)",
+      "type": "process",
+      "command": "python3",
+      "args": ["scripts/local.py", "--env", "dev", "stop"],
+      "options": { "cwd": "${workspaceFolder}" },
+      "problemMatcher": []
+    },
+    {
+      "label": "Static config checks (no services)",
+      "type": "process",
+      "command": "python3",
+      "args": ["-m", "unittest", "discover", "-s", "scripts/tests", "-v"],
+      "options": { "cwd": "${workspaceFolder}" },
+      "group": { "kind": "test", "isDefault": true },
+      "problemMatcher": []
+    },
+    {
+      "label": "CI: verify disposable stack (refuses without approval)",
+      "type": "process",
+      "command": "bash",
+      "args": ["scripts/verify.sh"],
+      "options": { "cwd": "${workspaceFolder}" },
+      "group": "test",
+      "problemMatcher": []
+    },
+    {
+      "label": "Frontend: dev server (dev stack API)",
+      "type": "shell",
+      "command": "npm run dev -- --host 127.0.0.1 --port 15174",
+      "options": {
+        "cwd": "${workspaceFolder}/frontend",
+        "env": { "API_PROXY_TARGET": "http://127.0.0.1:18000" }
+      },
+      "problemMatcher": []
+    }
+  ]
+}

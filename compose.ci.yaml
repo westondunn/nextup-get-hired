@@ -1,0 +1,208 @@
+# Disposable CI stack. Used only by scripts/verify_ci.py, which picks a random
+# project name (nextup-ci-<12 hex>), generates synthetic secret files in a fresh private
+# directory outside the repository (NEXTUP_CI_SECRETS_DIR), and removes containers and
+# that directory afterwards. Never combine this file with the development or staging stack.
+#
+# Same credential and guard architecture as dev/staging:
+#   nextup_ci_admin  bootstrap superuser; secret mounted into postgres only
+#   nextup_ci_owner  schema owner and migrator (CREATEDB in CI only); migrate and tests only
+#   nextup_ci_app    runtime DML only; api, worker, scheduler (and tests, for app-role engines)
+# Startup never migrates: verify_ci.py runs `migrate plan-apply` (confirmed on stdin; the token
+# never leaves the guard process),
+# and only then starts the runtime services, which refuse until the schema is initialized.
+# Disposable storage: PGDATA lives in the container layer (survives stop/start for the
+# outage rehearsal, removed with the project), redis and scheduler state on tmpfs.
+# Worker, scheduler, migrate, tests, postgres and redis sit on an internal network with no
+# egress; only api, frontend and e2e join the edge network. Fixture data mode serves the
+# bundled synthetic job data; live fetching is off and every provider request is refused in
+# code (app.sources.common.require_live_requests), so no external provider is contacted.
+# No provider credential exists in CI. E2E output goes to a fresh per-run directory created
+# by verify_ci.py outside the repository (NEXTUP_CI_E2E_DIR).
+x-backend: &backend
+  build: ./backend
+  init: true
+  user: '${NEXTUP_CI_UID:?Run python3 scripts/verify_ci.py}:${NEXTUP_CI_GID:?Run python3 scripts/verify_ci.py}'
+  restart: 'no'
+  networks: [backend]
+
+x-db: &db
+  NEXTUP_DB_HOST: postgres
+  NEXTUP_DB_PORT: '5432'
+  NEXTUP_DB_NAME: nextup_ci
+  NEXTUP_REDIS_URL: redis://redis:6379/0
+  NEXTUP_GMAIL_SYNC_ENABLED: 'false'
+  NEXTUP_CALENDAR_SYNC_ENABLED: 'false'
+  NEXTUP_EXTERNAL_CLASSIFIER_ENABLED: 'false'
+
+# Fixture data mode (ci/test only): synthetic fixtures, live fetching off, no credentials.
+x-features: &features
+  NEXTUP_DIAGNOSTIC_INTERVAL_SECONDS: '10'
+  NEXTUP_FIXTURE_DATA_MODE: 'true'
+  NEXTUP_LIVE_JOB_FETCH_ENABLED: 'false'
+  NEXTUP_JOB_FETCH_MIN_INTERVAL_SECONDS: '10'
+  NEXTUP_JOB_RETENTION_DAYS: '30'
+  NEXTUP_TASK_HISTORY_CLEANUP_ENABLED: 'true'
+  NEXTUP_TASK_HISTORY_RETENTION_DAYS: '30'
+  NEXTUP_TASK_HISTORY_BATCH_SIZE: '100'
+
+x-runtime: &runtime
+  <<: *backend
+  environment:
+    <<: [*db, *features]
+    NEXTUP_ENV: ci
+    NEXTUP_DB_USER: nextup_ci_app
+    NEXTUP_DB_PASSWORD_FILE: /run/secrets/db_app_password
+  secrets: [db_app_password]
+  depends_on:
+    postgres:
+      condition: service_healthy
+    redis:
+      condition: service_healthy
+
+services:
+  postgres:
+    image: postgres:17-bookworm
+    # Root phase identical to compose.base.yaml: copy only the owner and app passwords to a
+    # postgres-owned tmpfs for the first-boot script, then hand over to the image entrypoint.
+    entrypoint:
+      - /bin/sh
+      - -ec
+      - |
+        install -d -m 0700 -o postgres -g postgres /run/nextup-initdb
+        for name in db_owner_password db_app_password; do
+          install -m 0400 -o postgres -g postgres "/run/secrets/$$name" "/run/nextup-initdb/$$name"
+        done
+        exec docker-entrypoint.sh "$$@"
+      - nextup-initdb-wrapper
+    command: [postgres, -c, cluster_name=nextup-ci]
+    environment:
+      POSTGRES_USER: nextup_ci_admin
+      POSTGRES_DB: postgres
+      POSTGRES_PASSWORD_FILE: /run/secrets/db_admin_password
+      # Container layer survives stop/start for outage tests; `down` removes only CI data.
+      PGDATA: /var/lib/postgresql/ci-data
+    secrets: [db_admin_password, db_owner_password, db_app_password]
+    tmpfs:
+      # Cover the image's VOLUME declaration without allocating an anonymous volume.
+      - /var/lib/postgresql/data:size=16777216
+      - /run/nextup-initdb:mode=0700,size=65536
+    volumes:
+      - ./backend/docker/initdb:/docker-entrypoint-initdb.d:ro
+    networks: [backend]
+    healthcheck:
+      # Gate on the final TCP server, not the temporary bootstrap socket.
+      test: [CMD, pg_isready, -h, 127.0.0.1, -U, nextup_ci_admin, -d, postgres]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+  redis:
+    image: redis:7.4-bookworm
+    command: [redis-server, --appendonly, 'no', --save, '']
+    tmpfs:
+      - /data:size=67108864
+    networks: [backend]
+    healthcheck:
+      test: [CMD, redis-cli, ping]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+  # The only schema-changing service: guard plan (default, read-only) or plan-apply (confirmed).
+  migrate:
+    <<: *backend
+    profiles: [migrate]
+    entrypoint: [python, -m, app.guard]
+    command: [plan]
+    environment:
+      <<: *db
+      NEXTUP_ENV: ci
+      NEXTUP_DB_ROLE: migrator
+      NEXTUP_DB_USER: nextup_ci_owner
+      NEXTUP_DB_PASSWORD_FILE: /run/secrets/db_owner_password
+      NEXTUP_MIGRATION_KEY_FILE: /run/secrets/migration_key
+    secrets: [db_owner_password, migration_key]
+    depends_on:
+      postgres:
+        condition: service_healthy
+  # Test runner for privileged test operations (never serves, never started by `up`).
+  # Migrator identity for disposable test schemas/databases, migrated only through the
+  # guard's plan/apply; the app password builds runtime-role engines for the code under test.
+  tests:
+    <<: *backend
+    profiles: [test]
+    entrypoint: [/usr/bin/env]
+    command: [python, -c, "print('nextup CI test runner: pass an explicit command')"]
+    environment:
+      <<: [*db, *features]
+      NEXTUP_ENV: test
+      NEXTUP_DB_ROLE: migrator
+      NEXTUP_DB_USER: nextup_ci_owner
+      NEXTUP_DB_PASSWORD_FILE: /run/secrets/db_owner_password
+      NEXTUP_MIGRATION_KEY_FILE: /run/secrets/migration_key
+    secrets: [db_owner_password, db_app_password, migration_key]
+  api:
+    <<: *runtime
+    networks: [backend, edge]
+    ports: ['127.0.0.1:0:8000']
+    healthcheck:
+      test: [CMD, python, -c, "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/live', timeout=3)"]
+      interval: 2s
+      timeout: 4s
+      retries: 30
+  worker:
+    <<: *runtime
+    command: [celery, -A, app.celery_app:celery_app, worker, --loglevel=INFO, --concurrency=1, --hostname=worker@%h]
+    healthcheck:
+      test: [CMD-SHELL, 'celery -A app.celery_app:celery_app inspect ping --destination "worker@$${HOSTNAME}" --timeout 3']
+      interval: 5s
+      timeout: 8s
+      retries: 12
+  scheduler:
+    <<: *runtime
+    command: [celery, -A, app.celery_app:celery_app, beat, --loglevel=INFO, --schedule=/state/celerybeat-schedule]
+    tmpfs: ['/state:mode=1777,size=16777216']
+  frontend:
+    build: ./frontend
+    init: true
+    environment:
+      API_PROXY_TARGET: http://api:8000
+    networks: [edge]
+    ports: ['127.0.0.1:0:5173']
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test: [CMD, node, -e, "fetch('http://127.0.0.1:5173').then(r => {if (!r.ok) process.exit(1)}).catch(() => process.exit(1))"]
+      interval: 2s
+      timeout: 4s
+      retries: 30
+  e2e:
+    profiles: [test]
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.e2e
+    user: '${NEXTUP_CI_UID:?Run python3 scripts/verify_ci.py}:${NEXTUP_CI_GID:?Run python3 scripts/verify_ci.py}'
+    init: true
+    environment:
+      E2E_BASE_URL: http://frontend:5173
+      NPM_CONFIG_CACHE: /tmp/npm-cache
+      NEXTUP_CI_REQUIRE_PROFILE: '1'
+      NEXTUP_CI_RETENTION: '1'
+      PLAYWRIGHT_JUNIT_OUTPUT_FILE: /app/test-results/browser.xml
+    networks: [edge]
+    volumes:
+      - '${NEXTUP_CI_E2E_DIR:?Run python3 scripts/verify_ci.py}:/app/test-results'
+
+secrets:
+  db_admin_password:
+    file: ${NEXTUP_CI_SECRETS_DIR:?Run python3 scripts/verify_ci.py}/db_admin_password
+  db_owner_password:
+    file: ${NEXTUP_CI_SECRETS_DIR:?Run python3 scripts/verify_ci.py}/db_owner_password
+  db_app_password:
+    file: ${NEXTUP_CI_SECRETS_DIR:?Run python3 scripts/verify_ci.py}/db_app_password
+  migration_key:
+    file: ${NEXTUP_CI_SECRETS_DIR:?Run python3 scripts/verify_ci.py}/migration_key
+
+networks:
+  backend:
+    internal: true
+  edge: {}

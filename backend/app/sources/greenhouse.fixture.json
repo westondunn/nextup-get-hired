@@ -1,0 +1,21 @@
+{
+  "jobs": [
+    {
+      "id": 1001,
+      "title": "Head of QA",
+      "location": {"name": "Example City / Remote"},
+      "content": "&lt;p&gt;Synthetic duplicate from a second source. This is not a real vacancy.&lt;/p&gt;",
+      "absolute_url": "https://example.invalid/greenhouse/1001",
+      "updated_at": "2026-10-02T12:00:00Z"
+    },
+    {
+      "id": 1002,
+      "title": "Quality Engineering Manager",
+      "location": {"name": "Example City"},
+      "content": "Synthetic Greenhouse example. Lead test automation. This is not a real vacancy.",
+      "absolute_url": "https://example.invalid/greenhouse/1002",
+      "updated_at": "2026-10-03T12:00:00Z"
+    }
+  ],
+  "meta": {"total": 2}
+}

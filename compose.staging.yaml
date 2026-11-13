@@ -1,0 +1,111 @@
+# Nextup OSS staging overlay. Use only through:
+#   python3 scripts/local.py --env staging --confirm-project nextup-oss-stg <action>
+# or a Portainer Git stack named exactly nextup-oss-stg (GitOps updates off).
+# Staging may share a Docker engine with other stacks, so it relies on explicit names,
+# loopback-only ports, an internal data network and its own credentials, not on
+# network separation alone. Identity values are literals. Stack variables / `.env.staging`
+# carry only non-secret values: the instance ID, the host secret directory and its group,
+# loopback ports and tunables. Never a password, token or key.
+#
+# Secrets: operator-generated files in ${NEXTUP_STG_SECRETS_DIR} (directory root-owned
+# 0750; files root-owned 0440 with group ${NEXTUP_STG_SECRETS_GID}). Never copied from any
+# other system. Integrations are hard-disabled here and refused by the application.
+# Migrations are never part of a deploy: an operator runs `migrate plan` / `apply` on the
+# host shell as a separate, deliberate step.
+name: nextup-oss-stg
+
+x-stg-env: &stg-env
+  NEXTUP_ENV: staging
+  NEXTUP_INSTANCE_ID: ${NEXTUP_STG_INSTANCE_ID:?Set NEXTUP_STG_INSTANCE_ID (a UUID4) in .env.staging}
+  NEXTUP_DB_NAME: nextup_stg
+  NEXTUP_DIAGNOSTIC_INTERVAL_SECONDS: ${NEXTUP_STG_DIAGNOSTIC_INTERVAL_SECONDS:-60}
+  NEXTUP_JOB_FETCH_MIN_INTERVAL_SECONDS: ${NEXTUP_STG_JOB_FETCH_MIN_INTERVAL_SECONDS:-60}
+  NEXTUP_JOB_RETENTION_DAYS: ${NEXTUP_STG_JOB_RETENTION_DAYS:-30}
+  NEXTUP_TASK_HISTORY_CLEANUP_ENABLED: ${NEXTUP_STG_TASK_HISTORY_CLEANUP_ENABLED:-false}
+  NEXTUP_TASK_HISTORY_RETENTION_DAYS: ${NEXTUP_STG_TASK_HISTORY_RETENTION_DAYS:-30}
+  NEXTUP_TASK_HISTORY_BATCH_SIZE: ${NEXTUP_STG_TASK_HISTORY_BATCH_SIZE:-100}
+
+x-limits: &limits
+  deploy:
+    resources:
+      limits:
+        cpus: '0.50'
+        memory: 512M
+
+x-stg-runtime: &stg-runtime
+  <<: *limits
+  image: nextup-oss-stg/backend:local
+  group_add: ['${NEXTUP_STG_SECRETS_GID:?Set NEXTUP_STG_SECRETS_GID in .env.staging}']
+  restart: on-failure:3
+  environment:
+    <<: *stg-env
+    NEXTUP_DB_USER: nextup_stg_app
+    NEXTUP_DB_PASSWORD_FILE: /run/secrets/db_app_password
+  secrets: [db_app_password]
+
+services:
+  postgres:
+    <<: *limits
+    command: [postgres, -c, cluster_name=nextup-oss-stg]
+    environment:
+      POSTGRES_USER: nextup_stg_admin
+      POSTGRES_DB: postgres
+      POSTGRES_PASSWORD_FILE: /run/secrets/db_admin_password
+    secrets: [db_admin_password, db_owner_password, db_app_password]
+    networks: [backend]
+  redis:
+    <<: *limits
+    networks: [backend]
+  migrate:
+    image: nextup-oss-stg/backend:local
+    group_add: ['${NEXTUP_STG_SECRETS_GID:?Set NEXTUP_STG_SECRETS_GID in .env.staging}']
+    environment:
+      <<: *stg-env
+      NEXTUP_DB_ROLE: migrator
+      NEXTUP_DB_USER: nextup_stg_owner
+      NEXTUP_DB_PASSWORD_FILE: /run/secrets/db_owner_password
+      NEXTUP_MIGRATION_KEY_FILE: /run/secrets/migration_key
+    secrets: [db_owner_password, migration_key]
+    networks: [backend]
+  api:
+    <<: *stg-runtime
+    networks: [backend, edge]
+    ports:
+      - 127.0.0.1:${NEXTUP_STG_API_PORT:-28000}:8000
+  worker:
+    <<: *stg-runtime
+    networks: [backend]
+  scheduler:
+    <<: *stg-runtime
+    networks: [backend]
+  frontend:
+    <<: *limits
+    image: nextup-oss-stg/frontend:local
+    networks: [edge]
+    ports:
+      - 127.0.0.1:${NEXTUP_STG_FRONTEND_PORT:-25173}:5173
+
+secrets:
+  db_admin_password:
+    file: ${NEXTUP_STG_SECRETS_DIR:?Set NEXTUP_STG_SECRETS_DIR (absolute host path) in .env.staging}/db_admin_password
+  db_owner_password:
+    file: ${NEXTUP_STG_SECRETS_DIR:?Set NEXTUP_STG_SECRETS_DIR (absolute host path) in .env.staging}/db_owner_password
+  db_app_password:
+    file: ${NEXTUP_STG_SECRETS_DIR:?Set NEXTUP_STG_SECRETS_DIR (absolute host path) in .env.staging}/db_app_password
+  migration_key:
+    file: ${NEXTUP_STG_SECRETS_DIR:?Set NEXTUP_STG_SECRETS_DIR (absolute host path) in .env.staging}/migration_key
+
+networks:
+  backend:
+    name: nextup-oss-stg_backend
+    internal: true
+  edge:
+    name: nextup-oss-stg_edge
+
+volumes:
+  postgres-data:
+    name: nextup-oss-stg_postgres-data
+  redis-data:
+    name: nextup-oss-stg_redis-data
+  scheduler-data:
+    name: nextup-oss-stg_scheduler-data
