@@ -8,7 +8,8 @@ These are the gates that must be met before NextUp's integrations are described 
 
 - [ ] The default application works with no external service, model credential or integration configured. Evidence: pending.
 - [ ] Every shipped configuration publishes ports on the loopback interface only. Evidence: pending.
-- [ ] Credential-related and state-changing requests are refused outside the local session boundary ([#8](https://github.com/westondunn/nextup-get-hired/issues/8)). Evidence: pending.
+- [ ] Requests to a non-local host name and cross-origin state-changing requests are refused ([#8](https://github.com/westondunn/nextup-get-hired/issues/8)). Evidence: pending.
+- [ ] Integration and credential routes require a local session ([#18](https://github.com/westondunn/nextup-get-hired/issues/18)). Evidence: pending.
 - [ ] `SECURITY.md` states the authentication limits as they are at the release commit. Evidence: pending.
 - [ ] Pinned migration history is unchanged and every schema change is a new revision applied through the guard. Evidence: pending.
 - [ ] The verification run's secret audit passes at the release commit. Evidence: pending.
