@@ -23,7 +23,7 @@ x-dev-runtime: &dev-runtime
   # Same UID/GID as the launcher that generated the 0600 secret files.
   user: '${NEXTUP_DEV_LOCAL_UID:?Run python3 scripts/local.py --env dev start}:${NEXTUP_DEV_LOCAL_GID:?Run python3 scripts/local.py --env dev start}'
   restart: 'no'
-  environment:
+  environment: &dev-runtime-env
     <<: *dev-env
     NEXTUP_DB_USER: nextup_dev_app
     NEXTUP_DB_PASSWORD_FILE: /run/secrets/db_app_password
@@ -49,6 +49,11 @@ services:
     secrets: [db_owner_password, migration_key]
   api:
     <<: *dev-runtime
+    # Only the api verifies the local-session setup code, so only it receives the file.
+    environment:
+      <<: *dev-runtime-env
+      NEXTUP_SETUP_CODE_FILE: /run/secrets/setup_code
+    secrets: [db_app_password, setup_code]
     ports:
       - 127.0.0.1:${NEXTUP_DEV_API_PORT:-18000}:8000
   worker:
@@ -85,6 +90,8 @@ secrets:
     file: ./.secrets/dev/db_app_password
   migration_key:
     file: ./.secrets/dev/migration_key
+  setup_code:
+    file: ./.secrets/dev/setup_code
 
 volumes:
   postgres-data:

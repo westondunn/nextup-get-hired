@@ -80,3 +80,22 @@ def test_scheduler_delivers_to_postgres():
                 return
         time.sleep(1)
     pytest.fail(f"No new persisted scheduler delivery within {timeout} seconds")
+
+
+def test_local_session_round_trip_against_the_real_store():
+    """Start, use and end a session through the running api and Redis.
+
+    Assertions compare status codes and flags only, so a failure never prints the code.
+    """
+    code = get_settings().setup_code.get_secret_value()
+    assert len(code) >= 24, "the api service must receive the setup code file"
+    with httpx.Client(base_url="http://api:8000", timeout=20) as client:
+        assert client.get("/api/session").json() == {"configured": True, "active": False}
+        refused = client.post("/api/session", json={"code": "not-the-setup-code"})
+        assert refused.status_code == 401
+        assert client.get("/api/session").json()["active"] is False
+        started = client.post("/api/session", json={"code": code})
+        assert started.status_code == 204
+        assert client.get("/api/session").json() == {"configured": True, "active": True}
+        assert client.delete("/api/session").status_code == 204
+        assert client.get("/api/session").json()["active"] is False

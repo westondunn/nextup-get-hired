@@ -128,6 +128,8 @@ def config(project=PROJECT, secrets_dir=None, e2e_dir=None, user=USER):
         },
         "api": {
             **runtime,
+            "environment": {**runtime_env, "NEXTUP_SETUP_CODE_FILE": "/run/secrets/setup_code"},
+            "secrets": _secrets("db_app_password", "setup_code"),
             "networks": {"backend": None, "edge": None},
             "ports": [{"host_ip": "127.0.0.1", "published": "0", "target": 8000}],
         },
@@ -634,7 +636,7 @@ class Hardening(unittest.TestCase):
                 self.assertEqual(stack.env["NEXTUP_CI_SECRETS_DIR"], str(stack.secrets_dir))
                 self.assertEqual(stack.expected_user, f"{os.getuid()}:{os.getgid()}")
                 values = self.values(stack)
-                self.assertEqual(len(set(values)), 4)
+                self.assertEqual(len(set(values)), len(verify_ci.SECRET_NAMES))
                 self.assertFalse(any(v in json.dumps(stack.env) for v in values))
                 stack.preflight()
             self.assertNotEqual(stacks[0].run_dir, stacks[1].run_dir)

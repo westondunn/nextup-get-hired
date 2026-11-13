@@ -71,7 +71,13 @@ TOKEN_LINE = re.compile(r"(nextup-guard: token=)\S+")
 # Database identity is fixed for every CI run; only the Compose project is random.
 CI_DATABASE = "nextup_ci"
 CI_CLUSTER = "nextup-ci"
-SECRET_NAMES = ("db_admin_password", "db_owner_password", "db_app_password", "migration_key")
+SECRET_NAMES = (
+    "db_admin_password",
+    "db_owner_password",
+    "db_app_password",
+    "migration_key",
+    "setup_code",
+)
 SECRET_VALUE = re.compile(r"^[A-Za-z0-9_-]{24,256}$")
 MAX_SECRET_BYTES = 4096
 E2E_TARGET = "/app/test-results"
@@ -84,6 +90,7 @@ SERVICE_SECRETS = {
     "migrate": {"db_owner_password", "migration_key"},
     "tests": {"db_owner_password", "db_app_password", "migration_key"},
     **{name: {"db_app_password"} for name in RUNTIME_SERVICES},
+    "api": {"db_app_password", "setup_code"},
 }
 INTERNAL_ONLY = {"postgres", "redis", "worker", "scheduler", "migrate", "tests"}
 LEGACY_NAMES = frozenset(
@@ -390,6 +397,9 @@ def validate_ci(config, secrets_dir=None, e2e_dir=None, expected_user=None):
             k.startswith("NEXTUP_MIGRATION") for k in env
         )
         assert not services[name].get("entrypoint"), f"{name} must keep the guard entrypoint"
+        # Only the api verifies the local-session setup code.
+        setup_code = "/run/secrets/setup_code" if name == "api" else None
+        assert env.get("NEXTUP_SETUP_CODE_FILE") == setup_code, f"Setup code wiring in {name}"
     for name in (*RUNTIME_SERVICES, "tests"):
         env = services[name]["environment"]
         # Synthetic fixtures only; live fetching off.

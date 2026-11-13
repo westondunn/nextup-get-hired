@@ -44,6 +44,7 @@ python3 scripts/local.py --env dev stop      # stop; data is kept
 ```
 
 - `start` creates `.env.dev` from `env/dev.env.example` and generates database passwords as files under `.secrets/dev/`. Neither is committed.
+- `start` also generates `.secrets/dev/setup_code`, the code that starts a local session (`POST /api/session`). An installation created before this file existed gets it on its next `start`. No route requires a session yet; see [decisions/0001-local-session-boundary.md](decisions/0001-local-session-boundary.md).
 - `start` never migrates. Until `migrate` has initialised the schema, the services refuse to work. `migrate` shows a read-only plan first and applies it only after you type the confirmation code it prints.
 - The API and the web interface are published on the loopback interface only, by default on ports 18000 and 15173.
 - Open them as `127.0.0.1` or `localhost`. The API answers `400` to any other host name, and `403` to a state-changing request that a browser reports as coming from another origin. A proxy in front of the API must forward the browser's `Host` header unchanged, as `frontend/vite.config.ts` does. See [decisions/0001-local-session-boundary.md](decisions/0001-local-session-boundary.md).

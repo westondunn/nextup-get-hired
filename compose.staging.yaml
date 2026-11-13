@@ -37,7 +37,7 @@ x-stg-runtime: &stg-runtime
   image: nextup-oss-stg/backend:local
   group_add: ['${NEXTUP_STG_SECRETS_GID:?Set NEXTUP_STG_SECRETS_GID in .env.staging}']
   restart: on-failure:3
-  environment:
+  environment: &stg-runtime-env
     <<: *stg-env
     NEXTUP_DB_USER: nextup_stg_app
     NEXTUP_DB_PASSWORD_FILE: /run/secrets/db_app_password
@@ -69,6 +69,11 @@ services:
     networks: [backend]
   api:
     <<: *stg-runtime
+    # Only the api verifies the local-session setup code, so only it receives the file.
+    environment:
+      <<: *stg-runtime-env
+      NEXTUP_SETUP_CODE_FILE: /run/secrets/setup_code
+    secrets: [db_app_password, setup_code]
     networks: [backend, edge]
     ports:
       - 127.0.0.1:${NEXTUP_STG_API_PORT:-28000}:8000
@@ -94,6 +99,8 @@ secrets:
     file: ${NEXTUP_STG_SECRETS_DIR:?Set NEXTUP_STG_SECRETS_DIR (absolute host path) in .env.staging}/db_app_password
   migration_key:
     file: ${NEXTUP_STG_SECRETS_DIR:?Set NEXTUP_STG_SECRETS_DIR (absolute host path) in .env.staging}/migration_key
+  setup_code:
+    file: ${NEXTUP_STG_SECRETS_DIR:?Set NEXTUP_STG_SECRETS_DIR (absolute host path) in .env.staging}/setup_code
 
 networks:
   backend:
