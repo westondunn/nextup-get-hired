@@ -1,8 +1,8 @@
 # NextUp roadmap
 
-This page lists the planned integration outcomes in order. It is public planning for a pre-release project. Outside contributions are not being accepted yet (see the [README](../README.md#development-and-contributions)), so nothing here is an invitation to start work.
+This page lists the planned outcomes. P0 and P1 are in order; the section added after them is not yet placed. It is public planning for a pre-release project. Outside contributions are not being accepted yet (see the [README](../README.md#development-and-contributions)), so nothing here is an invitation to start work.
 
-**Snapshot date: 2026-11-13, last reconciled at commit `baf9028`.** Status, scope and acceptance criteria live in the linked issues; where this page and an issue disagree, the issue is right. The parent tracking issue is [#3](https://github.com/westondunn/nextup-get-hired/issues/3). There is no GitHub Project for this repository.
+**Snapshot date: 2026-11-13, last reconciled at commit `81ac008`.** Status, scope and acceptance criteria live in the linked issues; where this page and an issue disagree, the issue is right. The parent tracking issue is [#3](https://github.com/westondunn/nextup-get-hired/issues/3). There is no GitHub Project for this repository.
 
 An outcome is checked only when its completion gate is met and the evidence is linked. A branch, an open pull request or a closed issue does not check it. Readiness gates for a public release are in the [release checklist](RELEASE_CHECKLIST.md).
 
@@ -11,9 +11,10 @@ Branch names below are suggestions that follow the [branching guide](BRANCHING.m
 ## What exists today
 
 - Read-only Gmail and Google Calendar sync are implemented and switched off in every shipped configuration. There is no consent flow, no stored token and no supported way to enable them.
-- The API has no authentication and is published on the loopback interface only.
+- The API has no authentication and is published on the loopback interface only. It refuses requests to a non-local host name and cross-origin state-changing requests. Session routes exist, but no route requires a session yet.
 - The optional external classifier interface is described in [CORRESPONDENCE_SYNC.md](CORRESPONDENCE_SYNC.md) and is refused in every environment.
-- There is no Google Docs integration, no n8n workflow and no AI-provider integration in the repository.
+- There is no code for other mail or calendar providers (IMAP, SMTP, CalDAV, iCalendar), an AI provider, MCP, a workflow tool, Google Docs or first-run onboarding.
+- Nothing has a support status. [INTEGRATIONS.md](INTEGRATIONS.md) records each integration's implementation and support status separately.
 
 ## P0 — Tracking baseline and safety
 
@@ -69,15 +70,17 @@ Branch names below are suggestions that follow the [branching guide](BRANCHING.m
   - Contributor notes: `scripts/oss_env.py`, the Compose overlays, `backend/app/local_session.py`, `backend/app/correspondence.py`, `frontend/src/hub/SettingsView.tsx`; sessions are stored in Redis, so there is no migration
   - Contribution availability: maintainer-only
   - Complete when: session start, expiry and refusal are tested, the secret audit passes, and the Settings prompt has accessibility coverage
-  - Evidence: pending
+  - Evidence: partial. The setup code and session routes were merged in [#22](https://github.com/westondunn/nextup-get-hired/pull/22) as `81ac008` ([hosted CI run on `main`](https://github.com/westondunn/nextup-get-hired/actions/runs/43525228706)). No route requires a session yet and there is no Settings prompt, so the outcome is not met
 
-## P1 — Google connection
+## P1 — Google connection (the first connection path)
 
-- [ ] **Outcome: the bring-your-own Google OAuth client flow and token storage are decided**
+This remains the first connection to be completed and validated. It is not supported yet. The interoperability direction does not replace or restart it.
+
+- [ ] **Outcome: the Google OAuth client registration, flow and token storage are decided**
   - Tracking: [#9](https://github.com/westondunn/nextup-get-hired/issues/9)
   - Priority and dependencies: P1; blocked by [#7](https://github.com/westondunn/nextup-get-hired/issues/7)
   - Suggested branch: `docs/9-google-oauth-adr`
-  - Contributor notes: decision record under `docs/`; must cite current official Google documentation
+  - Contributor notes: decision record under `docs/decisions/`; must cite current official Google documentation; includes who owns the client registration (bring-your-own is the working assumption, a project-managed registration is the alternative)
   - Contribution availability: maintainer-only
   - Complete when: the decision record is reviewed and merged
   - Evidence: pending
@@ -127,22 +130,91 @@ Branch names below are suggestions that follow the [branching guide](BRANCHING.m
   - Complete when: a dated clean-machine run is recorded for each platform claimed
   - Evidence: pending
 
-## P2 — Portable n8n workflows (planned, not yet tracked)
+## Interoperability and onboarding (priority provisional)
 
-No issues have been filed. They will be created when the P1 work is under way.
+These outcomes were added on 2026-11-13 to carry the direction in [decision 0002](decisions/0002-standards-first-interoperability.md). They have no agreed position relative to P0–P3, and nothing in P0 or P1 has been moved to make room for them. Every protocol, provider and packaging choice they mention is undecided.
 
-- Sanitized, versioned workflow exports for optional mail labelling, grounded summaries and reviewed drafts.
-- A narrow, authenticated contract between NextUp and a workflow, with NextUp remaining the authoritative record.
-- Read-only import kept separate from any mailbox change. No automatic sending and no automatic job applications.
-- The external classifier contract in [CORRESPONDENCE_SYNC.md](CORRESPONDENCE_SYNC.md) is preserved: hints never override NextUp's detection or existing links.
+- [ ] **Outcome: the standards-first interoperability policy is accepted**
+  - Tracking: [#23](https://github.com/westondunn/nextup-get-hired/issues/23)
+  - Priority and dependencies: provisional; none
+  - Suggested branch: `docs/23-standards-first-interoperability`
+  - Contributor notes: `docs/decisions/0002-standards-first-interoperability.md`; the direction is agreed, the technical choices are proposals
+  - Contribution availability: maintainer-only
+  - Complete when: the maintainer sets the record's status and the public documents contain none of the excluded claims
+  - Evidence: pending
 
-## P3 — Optional AI and operations tooling (planned, not yet tracked)
+- [ ] **Outcome: a shared read-only correspondence capability contract is defined**
+  - Tracking: [#24](https://github.com/westondunn/nextup-get-hired/issues/24)
+  - Priority and dependencies: provisional; follows [#23](https://github.com/westondunn/nextup-get-hired/issues/23)
+  - Suggested branch: `docs/24-correspondence-capability-contract`
+  - Contributor notes: a contract document under `docs/`; maps the existing Gmail adapter onto it; no code change, no renamed stored keys
+  - Contribution availability: maintainer-only
+  - Complete when: the contract is reviewed and merged with the Gmail mapping and its gaps
+  - Evidence: pending
+
+- [ ] **Outcome: a second, independent email adapter has been evaluated**
+  - Tracking: [#25](https://github.com/westondunn/nextup-get-hired/issues/25)
+  - Priority and dependencies: provisional; blocked by [#24](https://github.com/westondunn/nextup-get-hired/issues/24)
+  - Suggested branch: `docs/25-second-email-adapter-evaluation`
+  - Contributor notes: bounded discovery; no provider or protocol chosen in advance; no implementation
+  - Contribution availability: maintainer-only
+  - Complete when: a written evaluation ends in one recommendation, or in a recommendation not to proceed
+  - Evidence: pending
+
+- [ ] **Outcome: an optional AI task contract is defined, with connectivity and quality evaluated separately**
+  - Tracking: [#26](https://github.com/westondunn/nextup-get-hired/issues/26)
+  - Priority and dependencies: provisional; follows [#23](https://github.com/westondunn/nextup-get-hired/issues/23)
+  - Suggested branch: `docs/26-ai-task-contract`
+  - Contributor notes: one narrow task, proposed as a classification hint for an imported message; no provider adapter and no general agent
+  - Contribution availability: maintainer-only
+  - Complete when: the contract names one task, its schema, consent and destination rules, and separate connectivity and quality checks
+  - Evidence: pending
+
+- [ ] **Outcome: a tested-compatibility policy and support matrix are maintained**
+  - Tracking: [#27](https://github.com/westondunn/nextup-get-hired/issues/27)
+  - Priority and dependencies: provisional; follows [#23](https://github.com/westondunn/nextup-get-hired/issues/23)
+  - Suggested branch: `docs/27-compatibility-matrix`
+  - Contributor notes: [INTEGRATIONS.md](INTEGRATIONS.md); implementation status and support status stay separate
+  - Contribution availability: maintainer-only
+  - Complete when: every integration in code has a row and no row says Tested without linked, dated evidence
+  - Evidence: pending
+
+- [ ] **Outcome: first-run setup of the core application is guided and validated, with no integration or AI**
+  - Tracking: [#28](https://github.com/westondunn/nextup-get-hired/issues/28)
+  - Priority and dependencies: provisional; follows [#23](https://github.com/westondunn/nextup-get-hired/issues/23)
+  - Suggested branch: `docs/28-core-onboarding-design`
+  - Contributor notes: design first; no packaging approach chosen in advance; migration confirmation, secret files and loopback exposure are not weakened
+  - Contribution availability: maintainer-only
+  - Complete when: the design is accepted, and clean-machine and representative-user validation are recorded separately from their targets
+  - Evidence: pending
+
+## P2 — Optional workflow access (planned, not yet tracked)
 
 No issues have been filed.
 
-- A model-provider adapter only where needed, with local models as the default and cloud processing as an explicit opt-in.
+- A narrow, authenticated interface through which another tool can work with NextUp, with NextUp remaining the authoritative record. A versioned API is one possible form; nothing is decided.
+- Workflow tools such as n8n are optional clients of that interface, never a dependency of the core. Any example workflow is sanitized and versioned.
+- Read-only import kept separate from any mailbox change. No automatic sending and no automatic job applications.
+- The external classifier contract in [CORRESPONDENCE_SYNC.md](CORRESPONDENCE_SYNC.md) is preserved: hints never override NextUp's detection or existing links.
+
+## P3 — Optional AI assistance and operations tooling (planned)
+
+The first AI task contract is tracked in [#26](https://github.com/westondunn/nextup-get-hired/issues/26). Nothing else here has an issue.
+
+- A processor adapter only where a defined task needs one. Local inference is optional, and cloud processing is an explicit opt-in with the destination shown.
 - A separate evaluation of AI quality against labelled synthetic fixtures and a rule-only baseline, so that working connectivity is not mistaken for demonstrated quality.
-- Documented boundaries for optional operations tools before any connector is built.
+- Documented boundaries for optional operations tools before any connector is built. None of them becomes a dependency of the core.
+
+## Deferred and discovery work (not tracked)
+
+Recorded so that it is not mistaken for planned or supported work. None of these has an issue, and none is scheduled.
+
+- Sending mail (SMTP submission or a provider API).
+- Calendar synchronization beyond the existing read-only Google adapter, including CalDAV and iCalendar file import or export.
+- Additional mail or calendar providers beyond the evaluation in [#25](https://github.com/westondunn/nextup-get-hired/issues/25).
+- Assistant access through MCP.
+- A versioned public API.
+- Advanced automation.
 
 ## Separate, approval-gated work
 

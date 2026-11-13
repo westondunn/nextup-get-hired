@@ -54,7 +54,7 @@ python3 scripts/local.py --env dev stop      # stop; data is kept
 
 ## External integrations
 
-Job-board feeds, read-only mail and calendar sync, and the optional external classifier are switched off in every shipped configuration, and there is no supported way to enable them yet. The classifier's interface is described in [CORRESPONDENCE_SYNC.md](CORRESPONDENCE_SYNC.md).
+Job-board feeds, read-only mail and calendar sync, and the optional external classifier are switched off in every shipped configuration, and there is no supported way to enable them yet. The classifier's interface is described in [CORRESPONDENCE_SYNC.md](CORRESPONDENCE_SYNC.md). What exists in the code and what has been tested are recorded separately in [INTEGRATIONS.md](INTEGRATIONS.md).
 
 ## Database migrations
 
