@@ -27,7 +27,7 @@ It is designed for one person running their own instance. It is not a hosted ser
 | First-run onboarding | Planned |
 | External integrations (job-board feeds, read-only mail and calendar sync) | Present in the code; switched off in every shipped configuration; no supported way to enable them yet |
 | Authentication | None. The API is unauthenticated, and the development configuration publishes ports on the loopback interface only. Do not expose it to a network |
-| Documentation | Being rewritten. Current documents: this README, [development notes](docs/DEVELOPMENT.md), the [optional external classifier interface](docs/CORRESPONDENCE_SYNC.md) and the [security policy](SECURITY.md) |
+| Documentation | Being rewritten. Current documents: this README, [development notes](docs/DEVELOPMENT.md), the [optional external classifier interface](docs/CORRESPONDENCE_SYNC.md), the [roadmap](docs/ROADMAP.md), the [release checklist](docs/RELEASE_CHECKLIST.md) and the [security policy](SECURITY.md) |
 | Release validation | In progress |
 
 Expect breaking changes, including to configuration and data formats, before a first release.
