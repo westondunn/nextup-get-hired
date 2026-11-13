@@ -66,7 +66,7 @@ Branch names below are suggestions that follow the [branching guide](BRANCHING.m
   - Tracking: [#18](https://github.com/westondunn/nextup-get-hired/issues/18)
   - Priority and dependencies: P0; blocked by [#8](https://github.com/westondunn/nextup-get-hired/issues/8)
   - Suggested branch: `feature/18-local-session`
-  - Contributor notes: `scripts/local.py`, a new backend module and migration, `backend/app/correspondence.py`, `frontend/src/hub/SettingsView.tsx`
+  - Contributor notes: `scripts/oss_env.py`, the Compose overlays, `backend/app/local_session.py`, `backend/app/correspondence.py`, `frontend/src/hub/SettingsView.tsx`; sessions are stored in Redis, so there is no migration
   - Contribution availability: maintainer-only
   - Complete when: session start, expiry and refusal are tested, the secret audit passes, and the Settings prompt has accessibility coverage
   - Evidence: pending

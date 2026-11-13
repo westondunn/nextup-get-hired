@@ -47,7 +47,7 @@ x-features: &features
 
 x-runtime: &runtime
   <<: *backend
-  environment:
+  environment: &runtime-env
     <<: [*db, *features]
     NEXTUP_ENV: ci
     NEXTUP_DB_USER: nextup_ci_app
@@ -141,6 +141,11 @@ services:
     secrets: [db_owner_password, db_app_password, migration_key]
   api:
     <<: *runtime
+    # Only the api verifies the local-session setup code, so only it receives the file.
+    environment:
+      <<: *runtime-env
+      NEXTUP_SETUP_CODE_FILE: /run/secrets/setup_code
+    secrets: [db_app_password, setup_code]
     networks: [backend, edge]
     ports: ['127.0.0.1:0:8000']
     healthcheck:
@@ -201,6 +206,8 @@ secrets:
     file: ${NEXTUP_CI_SECRETS_DIR:?Run python3 scripts/verify_ci.py}/db_app_password
   migration_key:
     file: ${NEXTUP_CI_SECRETS_DIR:?Run python3 scripts/verify_ci.py}/migration_key
+  setup_code:
+    file: ${NEXTUP_CI_SECRETS_DIR:?Run python3 scripts/verify_ci.py}/setup_code
 
 networks:
   backend:

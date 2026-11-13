@@ -24,6 +24,7 @@ from app.follow_up_rules import router as follow_up_router
 from app.health import probe_health
 from app.job_ratings import router as job_ratings_router
 from app.jobs import router as jobs_router
+from app.local_session import router as session_router
 from app.models import DiagnosticRun
 from app.profiles import router as profile_router
 from app.request_boundary import RequestBoundaryMiddleware
@@ -61,6 +62,7 @@ app.include_router(application_intake_router)
 app.include_router(follow_up_router)
 app.include_router(correspondence_router)
 app.include_router(seed_router)
+app.include_router(session_router)
 logger = logging.getLogger(__name__)
 Database = Annotated[Session, Depends(get_session)]
 

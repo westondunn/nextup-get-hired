@@ -69,7 +69,7 @@ Layers 1 and 2 stop browser-based attacks but not another local process. Routes 
 
 - The launcher generates a setup code as a file under `.secrets/<env>/`, in the same way it generates database passwords. It never prints the code.
 - The user reads the file and enters the code once in Settings. The API compares it in constant time and issues a session.
-- The session is a random identifier in a cookie marked `HttpOnly`, `SameSite=Strict` and `Path=/api`. Only a hash of the identifier is stored, in a database table.
+- The session is a random identifier in a cookie marked `HttpOnly`, `SameSite=Strict` and `Path=/api`. Only a hash of the identifier is stored, in the Redis instance the stack already runs.
 - A session ends after 12 hours of inactivity and after 7 days at most. The user can end one from Settings.
 
 Routes in scope when layer 3 first ships:
@@ -113,7 +113,7 @@ Messages and log lines are value-free: they never include a header value, the se
 This is larger than one reviewable change, so it is tracked as two issues:
 
 1. **Layers 1 and 2** on all routes ([#8](https://github.com/westondunn/nextup-get-hired/issues/8)). No user-visible change, no migration. Tests for each refusal, for every access path in the table above, and for the proxy assumption.
-2. **Layer 3** ([#18](https://github.com/westondunn/nextup-get-hired/issues/18)): setup code in the launcher, session routes, the Settings prompt with accessibility coverage, and protection of the two correspondence routes. A new `oss_NNNN` migration for the session table.
+2. **Layer 3** ([#18](https://github.com/westondunn/nextup-get-hired/issues/18)): setup code in the launcher, session routes, the Settings prompt with accessibility coverage, and protection of the two correspondence routes. No migration.
 
 The Google connection work depends on both.
 
@@ -123,10 +123,20 @@ The maintainer accepted the proposed answers on 2026-11-13.
 
 | Question | Decision |
 | --- | --- |
-| Session storage | A database table, added by a new `oss_NNNN` migration. Sessions survive a restart |
+| Session storage | Redis, under a key derived from a hash of the session identifier, with key expiry enforcing the idle limit. Sessions survive a restart because the stack runs Redis with persistence. See the amendment below |
 | Session lifetime | 12 hours of inactivity, 7 days at most |
 | Scope of layer 3 | The two correspondence routes and the Google connection routes only. Export, seed import and retention routes are not included in the first slice |
 | Staging | Same rules as development, with no additional host names |
+
+### Amendment, 2026-11-13: session storage
+
+The first accepted answer was a database table. That was changed to Redis before any code was written, with the maintainer's agreement, for these reasons:
+
+- A table would have been the first migration added after the 29 pinned revisions. That path through the migration guard has never been used for a real revision, and it deserves its own focused change, not a place inside a session feature.
+- The stack already runs Redis with persistence, and the API already connects to it for its health probe.
+- Redis key expiry enforces the idle limit directly, and ending a session is deleting one key.
+
+The cost is that sessions are lost if the Redis volume is lost, and the user then enters the setup code again. The first new migration is expected to arrive with the Google token store ([#10](https://github.com/westondunn/nextup-get-hired/issues/10)), where a table is unavoidable.
 
 ## References
 

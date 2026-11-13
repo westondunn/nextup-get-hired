@@ -124,7 +124,13 @@ def rendered_dev(root="/x", instance=INSTANCE, user="1000:1000"):
             "restart": "no",
             "depends_on": {"postgres": {"condition": "service_healthy"}},
         },
-        "api": {**runtime, "ports": port(18000, 8000), "depends_on": {"postgres": {}, "redis": {}}},
+        "api": {
+            **runtime,
+            "environment": {**runtime_env, "NEXTUP_SETUP_CODE_FILE": "/run/secrets/setup_code"},
+            "secrets": secrets("db_app_password", "setup_code"),
+            "ports": port(18000, 8000),
+            "depends_on": {"postgres": {}, "redis": {}},
+        },
         "worker": {**runtime, "command": ["celery", "worker"]},
         "scheduler": {
             **runtime,
@@ -165,6 +171,36 @@ class RenderedShape(unittest.TestCase):
                     self.assertRaises(oss_env.IsolationError),
                 ):
                     oss_env.validate_config(value, oss_env.ENVIRONMENTS["dev"])
+
+    def test_setup_code_reaches_the_api_only(self):
+        """Only the api verifies the local-session setup code."""
+        dev = oss_env.ENVIRONMENTS["dev"]
+        for service in ("worker", "scheduler", "migrate"):
+            for mutate in (
+                lambda c, s=service: c["services"][s]["secrets"].append(
+                    {"source": "setup_code", "target": "/run/secrets/setup_code"}
+                ),
+                lambda c, s=service: c["services"][s]["environment"].update(
+                    NEXTUP_SETUP_CODE_FILE="/run/secrets/setup_code"
+                ),
+            ):
+                value = rendered_dev()
+                mutate(value)
+                with self.subTest(service=service), self.assertRaises(oss_env.IsolationError):
+                    oss_env.validate_config(value, dev)
+        for mutate in (
+            lambda c: c["services"]["api"]["environment"].pop("NEXTUP_SETUP_CODE_FILE"),
+            lambda c: c["services"]["api"]["environment"].update(
+                NEXTUP_SETUP_CODE_FILE="/run/secrets/db_app_password"
+            ),
+            lambda c: c["services"]["api"]["environment"].update(NEXTUP_SETUP_CODE=SENTINEL),
+            lambda c: c["services"]["api"]["secrets"].pop(),
+        ):
+            value = rendered_dev()
+            mutate(value)
+            with self.assertRaises(oss_env.IsolationError) as caught:
+                oss_env.validate_config(value, dev)
+            self.assertNotIn(SENTINEL, str(caught.exception))
 
     def test_validation_errors_never_echo_values(self):
         for mutate in (
@@ -512,7 +548,7 @@ class StartAndEnvFile(unittest.TestCase):
                 path = root / ".secrets/dev" / name
                 self.assertEqual(path.stat().st_mode & 0o777, 0o600, name)
                 secrets[name] = path.read_text().strip()
-            self.assertEqual(len(set(secrets.values())), 4)
+            self.assertEqual(len(set(secrets.values())), len(oss_env.SECRET_NAMES))
             shown = " ".join(str(c.args[0]) for c in printed.call_args_list)
             self.assertFalse(any(value in shown for value in secrets.values()))
             calls = [c.args for c in stack.compose.call_args_list]

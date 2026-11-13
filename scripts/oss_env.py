@@ -106,11 +106,22 @@ RUNTIME_SERVICES = ("api", "worker", "scheduler")
 BACKEND_SERVICES = RUNTIME_SERVICES + ("migrate",)
 
 # Secrets: Compose `secrets:` read from files; containers see /run/secrets/<name> only.
-SECRET_NAMES = ("db_admin_password", "db_owner_password", "db_app_password", "migration_key")
+# `setup_code` is the local-session setup code (docs/decisions/0001-local-session-boundary.md).
+# Only the api verifies it, so only the api receives it.
+SECRET_NAMES = (
+    "db_admin_password",
+    "db_owner_password",
+    "db_app_password",
+    "migration_key",
+    "setup_code",
+)
+SETUP_CODE_SERVICE = "api"
+SETUP_CODE_VARIABLE = "NEXTUP_SETUP_CODE_FILE"
 SERVICE_SECRETS = {
     "postgres": {"db_admin_password", "db_owner_password", "db_app_password"},
     "migrate": {"db_owner_password", "migration_key"},
     **{name: {"db_app_password"} for name in RUNTIME_SERVICES},
+    SETUP_CODE_SERVICE: {"db_app_password", "setup_code"},
 }
 INIT_SCRIPT_DIR = "backend/docker/initdb"
 INIT_MOUNT_TARGET = "/docker-entrypoint-initdb.d"
@@ -135,6 +146,7 @@ BACKEND_ENV_KEYS = frozenset(
         "NEXTUP_DB_PASSWORD_FILE",
         "NEXTUP_DB_ROLE",
         "NEXTUP_MIGRATION_KEY_FILE",
+        "NEXTUP_SETUP_CODE_FILE",
         "NEXTUP_REDIS_URL",
         "NEXTUP_DIAGNOSTIC_INTERVAL_SECONDS",
         "NEXTUP_JOB_FETCH_MIN_INTERVAL_SECONDS",
@@ -676,6 +688,10 @@ def _validate_backend(fail, sname, service, values, env, protected) -> None:
         for key in ("NEXTUP_DB_ROLE", "NEXTUP_MIGRATION_KEY_FILE"):
             if key in values:
                 fail(f"{sname} is a runtime service and must not set {key}")
+    if sname == SETUP_CODE_SERVICE:
+        expected[SETUP_CODE_VARIABLE] = "/run/secrets/setup_code"
+    elif SETUP_CODE_VARIABLE in values:
+        fail(f"{sname} must not set {SETUP_CODE_VARIABLE}")
     for key, value in expected.items():
         if values.get(key) != value:
             fail(f"{sname} must set {key}={value}")
