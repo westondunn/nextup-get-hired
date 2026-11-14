@@ -1,6 +1,6 @@
 # Roadmap and release status
 
-> Draft for the wiki [Roadmap](https://github.com/westondunn/nextup-get-hired/wiki/Roadmap) page. **This draft has changed since the page was published.** The published page still reflects repository commit `ea8b896` (wiki revision `accaa0b`). Republish only after these changes are merged; see [README.md](README.md) in this directory.
+> Repository copy of the published wiki [Roadmap](https://github.com/westondunn/nextup-get-hired/wiki/Roadmap) page. See [README.md](README.md) in this directory.
 
 This page is a summary. The ordered outcomes are in [docs/ROADMAP.md](../ROADMAP.md), the readiness gates are in [docs/RELEASE_CHECKLIST.md](../RELEASE_CHECKLIST.md), and live status is in the [tracking issue](https://github.com/westondunn/nextup-get-hired/issues/3).
 
@@ -21,4 +21,4 @@ This page is a summary. The ordered outcomes are in [docs/ROADMAP.md](../ROADMAP
 
 See the [security policy](../../SECURITY.md) for the full list and for how to report a vulnerability privately.
 
-Source commit: to be filled in at republication. Published page last synchronized: 2026-11-13, from `ea8b896`.
+Published from commit `71011e7`. Last synchronized: 2026-11-13 (wiki revision `557ed05`).

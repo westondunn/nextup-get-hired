@@ -8,7 +8,7 @@ NextUp is pre-release. This page describes the tooling that exists in the reposi
 |---|---|
 | Full verification in a disposable stack (`scripts/verify_ci.py`) | Run on Linux (x86-64) with Docker Engine and the Compose plugin |
 | The same on macOS or Windows | Not tested |
-| The hosted workflow in `.github/workflows/ci.yml` | Not yet run on a hosted runner |
+| The hosted workflow in `.github/workflows/ci.yml` | Runs the same verification on a hosted `ubuntu-24.04` runner for every push and pull request. Passing on `main` on 2026-11-13, for example [this run](https://github.com/westondunn/nextup-get-hired/actions/runs/43538353763) at commit `7370e9a`. Current results are on the [Actions page](https://github.com/westondunn/nextup-get-hired/actions/workflows/ci.yml?query=branch%3Amain) |
 | The local development launcher (`scripts/local.py`) | Covered by unit tests; not yet validated on a clean machine |
 | Display of dates in the Search Plan view outside UTC | Not tested |
 
@@ -16,6 +16,7 @@ NextUp is pre-release. This page describes the tooling that exists in the reposi
 
 - Docker Engine with the Compose plugin.
 - Python 3.12 or later on the host, for the scripts. They use the standard library only.
+- Optional: PyYAML, for the tooling tests that parse the Compose files. Without it those tests are skipped, so a local run can pass where the hosted workflow, which has it, fails.
 
 Everything else (Python and Node dependencies, PostgreSQL, Redis, browsers for the end-to-end tests) runs in containers.
 
@@ -55,6 +56,14 @@ python3 scripts/local.py --env dev stop      # stop; data is kept
 ## External integrations
 
 Job-board feeds, read-only mail and calendar sync, and the optional external classifier are switched off in every shipped configuration, and there is no supported way to enable them yet. The classifier's interface is described in [CORRESPONDENCE_SYNC.md](CORRESPONDENCE_SYNC.md). What exists in the code and what has been tested are recorded separately in [INTEGRATIONS.md](INTEGRATIONS.md).
+
+## Branches and pull requests
+
+Work happens on short-lived topic branches that are merged into `main` through pull requests. The naming rules, pull-request expectations and merge gates are in the [branching guide](BRANCHING.md). The guide is the maintainer's adopted workflow. Branch names are not checked automatically, and outside contributions are not being accepted yet.
+
+- The hosted workflow's check is named `verify`. It is not a required check: the `main` ruleset requires a pull request and linear history, but no passing check.
+- A push to a branch that has an open pull request starts the verification twice, once for the push and once for the pull request. Both must be read; they run the same script on the same commit.
+- A closing keyword next to an issue number in a pull-request description closes that issue on merge, even when the sentence is negated. Linking an issue in the pull request's sidebar does the same.
 
 ## Database migrations
 
