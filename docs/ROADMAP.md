@@ -2,7 +2,7 @@
 
 This page lists the planned outcomes. P0 and P1 are in order; the section added after them is not yet placed. It is public planning for a pre-release project. Outside contributions are not being accepted yet (see the [README](../README.md#development-and-contributions)), so nothing here is an invitation to start work.
 
-**Snapshot date: 2026-11-13, last reconciled at commit `81ac008`.** Status, scope and acceptance criteria live in the linked issues; where this page and an issue disagree, the issue is right. The parent tracking issue is [#3](https://github.com/westondunn/nextup-get-hired/issues/3). There is no GitHub Project for this repository.
+**Snapshot date: 2026-11-13, last reconciled at commit `7370e9a`.** Status, scope and acceptance criteria live in the linked issues; where this page and an issue disagree, the issue is right. The parent tracking issue is [#3](https://github.com/westondunn/nextup-get-hired/issues/3). There is no GitHub Project for this repository.
 
 An outcome is checked only when its completion gate is met and the evidence is linked. A branch, an open pull request or a closed issue does not check it. Readiness gates for a public release are in the [release checklist](RELEASE_CHECKLIST.md).
 
@@ -63,14 +63,14 @@ Branch names below are suggestions that follow the [branching guide](BRANCHING.m
   - Complete when: each refusal path and each access path is tested and the full verification passes
   - Evidence: merged in [#20](https://github.com/westondunn/nextup-get-hired/pull/20) as `baf9028`; [hosted CI run on `main`](https://github.com/westondunn/nextup-get-hired/actions/runs/43509731795), which includes the integration, browser and secret-audit checks; local probes of the development stack are recorded in the pull request
 
-- [ ] **Outcome: integration and credential routes require a local session**
+- [x] **Outcome: integration and credential routes require a local session**
   - Tracking: [#18](https://github.com/westondunn/nextup-get-hired/issues/18)
   - Priority and dependencies: P0; blocked by [#8](https://github.com/westondunn/nextup-get-hired/issues/8)
-  - Suggested branch: `feature/18-local-session`
+  - Suggested branch: `feature/18-local-session` (used for the first part; the second part used `feature/18-session-enforcement`)
   - Contributor notes: `scripts/oss_env.py`, the Compose overlays, `backend/app/local_session.py`, `backend/app/correspondence.py`, `frontend/src/hub/SettingsView.tsx`; sessions are stored in Redis, so there is no migration
   - Contribution availability: maintainer-only
   - Complete when: session start, expiry and refusal are tested, the secret audit passes, and the Settings prompt has accessibility coverage
-  - Evidence: partial. The setup code and session routes were merged in [#22](https://github.com/westondunn/nextup-get-hired/pull/22) as `81ac008` ([hosted CI run on `main`](https://github.com/westondunn/nextup-get-hired/actions/runs/43525228706)). No route requires a session yet and there is no Settings prompt, so the outcome is not met
+  - Evidence: the setup code and session routes were merged in [#22](https://github.com/westondunn/nextup-get-hired/pull/22) as `81ac008`, and the session requirement and Settings prompt in [#31](https://github.com/westondunn/nextup-get-hired/pull/31) as `7370e9a`; [hosted CI run on `main`](https://github.com/westondunn/nextup-get-hired/actions/runs/43538353763), which includes the integration suites, the live-stack session test, the browser tests and the secret audit; local probes of the development stack are recorded in both pull requests
 
 ## P1 — Google connection (the first connection path)
 
