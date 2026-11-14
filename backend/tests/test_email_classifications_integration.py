@@ -21,9 +21,11 @@ from app.correspondence_tasks import sync_gmail
 from app.email_classifications import HINT_KEY
 from app.models import Communication, EmailClassification
 
-pytestmark = pytest.mark.skipif(
-    os.environ.get("RUN_INTEGRATION") != "1", reason="Requires PostgreSQL"
-)
+pytestmark = [
+    pytest.mark.skipif(os.environ.get("RUN_INTEGRATION") != "1", reason="Requires PostgreSQL"),
+    # These suites exercise sync behaviour; the session requirement has its own tests.
+    pytest.mark.usefixtures("local_session"),
+]
 
 # Verbatim from the external email-labeler contract; do not edit.
 CONTRACT = """

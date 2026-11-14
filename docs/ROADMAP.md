@@ -11,7 +11,7 @@ Branch names below are suggestions that follow the [branching guide](BRANCHING.m
 ## What exists today
 
 - Read-only Gmail and Google Calendar sync are implemented and switched off in every shipped configuration. There is no consent flow, no stored token and no supported way to enable them.
-- The API has no authentication and is published on the loopback interface only. It refuses requests to a non-local host name and cross-origin state-changing requests. Session routes exist, but no route requires a session yet.
+- The API has no authentication and is published on the loopback interface only. It refuses requests to a non-local host name and cross-origin state-changing requests. Changing or running mail and calendar sync requires a local session; no other route does.
 - The optional external classifier interface is described in [CORRESPONDENCE_SYNC.md](CORRESPONDENCE_SYNC.md) and is refused in every environment.
 - There is no code for other mail or calendar providers (IMAP, SMTP, CalDAV, iCalendar), an AI provider, MCP, a workflow tool, Google Docs or first-run onboarding.
 - Nothing has a support status. [INTEGRATIONS.md](INTEGRATIONS.md) records each integration's implementation and support status separately.

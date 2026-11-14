@@ -70,3 +70,17 @@ def _test_client_host(monkeypatch):
     from app import request_boundary
 
     monkeypatch.setattr(request_boundary, "TEST_HOSTS", frozenset({"testserver"}))
+
+
+@pytest.fixture
+def local_session():
+    """Satisfy the local-session requirement for tests that are about something else.
+
+    Opt-in only. The requirement itself is covered in tests/test_local_session.py.
+    """
+    from app.local_session import require_session
+    from app.main import app
+
+    app.dependency_overrides[require_session] = lambda: None
+    yield
+    app.dependency_overrides.pop(require_session, None)

@@ -8,7 +8,7 @@ import {
   parseProfile,
   exampleProfile,
 } from '../profile-api';
-import { request } from '../jobs-api';
+import { ApiError, request } from '../jobs-api';
 import { type Campaign, readCampaigns, updateCampaign } from './campaign-api';
 import {
   type CorrespondenceSettings,
@@ -16,6 +16,7 @@ import {
   runCorrespondenceSync,
   saveCorrespondence,
 } from './correspondence-api';
+import { LocalSessionCard } from './LocalSessionCard';
 
 const SERVICE_LABELS: Record<string, string> = {
   api: 'API',
@@ -23,6 +24,14 @@ const SERVICE_LABELS: Record<string, string> = {
   broker: 'Redis broker',
   worker: 'Celery worker',
 };
+
+// Sync settings are behind the local session; say where to unlock them.
+function syncFailure(error: unknown, fallback: string): string {
+  if (error instanceof ApiError && error.status === 401) {
+    return 'Integration settings are locked. Unlock them above with the setup code, then try again.';
+  }
+  return error instanceof Error ? error.message : fallback;
+}
 
 /* ---------- Main Settings View ---------- */
 export default function SettingsView() {
@@ -218,7 +227,7 @@ export default function SettingsView() {
         `Gmail sync ${next.enabled ? 'on' : 'off'}; Calendar sync ${next.calendar_enabled ? 'on' : 'off'}; applications from confirmation emails ${next.auto_create_applications ? 'on' : 'off'}. Mail and calendar access stay read only.`,
       );
     } catch (e) {
-      setMailError(e instanceof Error ? e.message : 'Could not save sync settings.');
+      setMailError(syncFailure(e, 'Could not save sync settings.'));
     } finally {
       setMailBusy(false);
     }
@@ -236,7 +245,7 @@ export default function SettingsView() {
           .catch(() => undefined);
       }, 5000);
     } catch (e) {
-      setMailError(e instanceof Error ? e.message : 'Sync could not be queued.');
+      setMailError(syncFailure(e, 'Sync could not be queued.'));
     } finally {
       setMailBusy(false);
     }
@@ -486,6 +495,8 @@ export default function SettingsView() {
       {/* ===== Integrations ===== */}
       <Section title="Integrations">
         <p className="mb-3 text-xs text-slate-500">Connect external services.</p>
+
+        <LocalSessionCard />
 
         {/* Google Calendar (read-only sync, backend-backed) */}
         <IntegrationCard

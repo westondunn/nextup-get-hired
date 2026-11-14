@@ -91,11 +91,16 @@ def test_local_session_round_trip_against_the_real_store():
     assert len(code) >= 24, "the api service must receive the setup code file"
     with httpx.Client(base_url="http://api:8000", timeout=20) as client:
         assert client.get("/api/session").json() == {"configured": True, "active": False}
+        invalid = {"enabled": "not-a-boolean"}  # fails validation, so nothing is ever saved
+        assert client.put("/api/correspondence", json=invalid).status_code == 401
+        assert client.post("/api/correspondence/sync").status_code == 401
         refused = client.post("/api/session", json={"code": "not-the-setup-code"})
         assert refused.status_code == 401
         assert client.get("/api/session").json()["active"] is False
         started = client.post("/api/session", json={"code": code})
         assert started.status_code == 204
         assert client.get("/api/session").json() == {"configured": True, "active": True}
+        assert client.put("/api/correspondence", json=invalid).status_code == 422
         assert client.delete("/api/session").status_code == 204
         assert client.get("/api/session").json()["active"] is False
+        assert client.put("/api/correspondence", json=invalid).status_code == 401

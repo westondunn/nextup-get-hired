@@ -3,6 +3,7 @@
 import logging
 
 import pytest
+import route_helpers
 from fastapi import Depends, FastAPI
 from fastapi.testclient import TestClient
 from pydantic import SecretStr
@@ -296,3 +297,81 @@ def test_the_application_serves_the_session_routes(monkeypatch, redis):
         assert client.get("/api/session").json() == {"configured": True, "active": True}
     finally:
         real_app.dependency_overrides.pop(get_store, None)
+
+
+# ---------- routes that require a session ----------
+
+PROTECTED = [
+    ("PUT", "/api/correspondence"),
+    ("POST", "/api/correspondence/sync"),
+]
+
+
+@pytest.fixture
+def app_client(monkeypatch, redis):
+    """The real application with a fake store and a database that must not be touched."""
+    from unittest.mock import MagicMock
+
+    from app.db import get_session
+
+    database = MagicMock()
+    database.get.return_value = None
+    database.scalar.return_value = 0
+    monkeypatch.setattr(local_session, "get_settings", lambda: Settings(setup_code=SecretStr(CODE)))
+    monkeypatch.setattr(local_session.time, "time", lambda: redis.now)
+    real_app.dependency_overrides[get_store] = lambda: SessionStore(redis)
+    real_app.dependency_overrides[get_session] = lambda: database
+    try:
+        yield TestClient(real_app), database
+    finally:
+        real_app.dependency_overrides.pop(get_store, None)
+        real_app.dependency_overrides.pop(get_session, None)
+
+
+@pytest.mark.parametrize("method,path", PROTECTED)
+@pytest.mark.parametrize("body", [None, {"enabled": True}, {"enabled": "not-a-boolean"}])
+def test_protected_routes_refuse_without_a_session_before_anything_else(
+    app_client, method, path, body
+):
+    client, database = app_client
+    response = client.request(method, path, json=body)
+    assert response.status_code == 401
+    assert response.json() == {"detail": local_session.SESSION_REQUIRED}
+    assert not database.method_calls  # refused before validation or any database work
+
+
+@pytest.mark.parametrize("method,path", PROTECTED)
+def test_protected_routes_are_reached_with_a_session(app_client, monkeypatch, method, path):
+    client, _ = app_client
+    monkeypatch.setattr("app.correspondence.get_settings", lambda: Settings())
+    assert start(client).status_code == 204
+    response = client.request(method, path, json={"enabled": "not-a-boolean"})
+    # Past the session check: the route's own validation or state answers instead.
+    assert response.status_code in (409, 422)
+
+
+@pytest.mark.parametrize("method,path", PROTECTED)
+def test_protected_routes_refuse_again_after_the_session_ends(app_client, method, path):
+    client, _ = app_client
+    start(client)
+    assert client.delete("/api/session").status_code == 204
+    assert client.request(method, path, json={}).status_code == 401
+
+
+def test_reading_sync_settings_needs_no_session(app_client, monkeypatch):
+    client, _ = app_client
+    monkeypatch.setattr("app.correspondence.get_settings", lambda: Settings())
+    assert client.get("/api/correspondence").status_code == 200
+
+
+def test_only_the_intended_routes_require_a_session():
+    """A route gaining or losing the requirement must be a deliberate change here."""
+    routes = route_helpers.api_routes(real_app)
+    assert len(routes) > 50  # the walk reached the feature routers
+    requiring = set()
+    for route in routes:
+        dependant = getattr(route, "dependant", None)
+        calls = {d.call for d in dependant.dependencies} if dependant else set()
+        if require_session in calls:
+            requiring |= {(m, route.path) for m in route.methods}
+    assert requiring == set(PROTECTED)

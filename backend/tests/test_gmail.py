@@ -417,7 +417,7 @@ def test_sync_records_provider_failure_without_raising():
 
 
 @pytest.fixture
-def api_session():
+def api_session(local_session):
     database = MagicMock()
     database.get.return_value = None
     database.scalar.return_value = 0
