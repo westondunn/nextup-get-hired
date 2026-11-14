@@ -59,7 +59,7 @@ Job-board feeds, read-only mail and calendar sync, and the optional external cla
 
 ## Branches and pull requests
 
-Work happens on short-lived topic branches that are merged into `main` through pull requests. The naming rules, pull-request expectations and merge gates are in the [branching guide](BRANCHING.md). The guide is the maintainer's adopted workflow. Branch names are not checked automatically, and outside contributions are not being accepted yet.
+Work happens on short-lived topic branches that are merged into `main` through pull requests. The naming rules, pull-request expectations and merge gates are in the [branching guide](BRANCHING.md). The guide is the maintainer's adopted workflow. Branch names are not checked automatically, and outside contributions are not being accepted yet; the policy is in [CONTRIBUTING.md](../CONTRIBUTING.md).
 
 - The hosted workflow's check is named `verify`. It is not a required check: the `main` ruleset requires a pull request and linear history, but no passing check.
 - A push to a branch that has an open pull request starts the verification twice, once for the push and once for the pull request. Both must be read; they run the same script on the same commit.

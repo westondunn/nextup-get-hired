@@ -62,8 +62,7 @@ The application uses separate database roles for administration, schema changes 
 The project is being prepared for public development. Until that work is complete:
 
 - there are no supported setup instructions, and the tooling described in [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) may change without notice;
-- outside contributions are not being accepted yet;
-- contribution guidelines will be published before the first release;
+- outside contributions are not being accepted yet, as stated in [CONTRIBUTING.md](CONTRIBUTING.md), which is preparatory and not an invitation to start work;
 - security reports are handled as described in [SECURITY.md](SECURITY.md).
 
 ## Licence
