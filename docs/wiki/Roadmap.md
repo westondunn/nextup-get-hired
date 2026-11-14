@@ -4,9 +4,9 @@
 
 This page is a summary. The ordered outcomes are in [docs/ROADMAP.md](../ROADMAP.md), the readiness gates are in [docs/RELEASE_CHECKLIST.md](../RELEASE_CHECKLIST.md), and live status is in the [tracking issue](https://github.com/westondunn/nextup-get-hired/issues/3).
 
-| Phase | Aim | State on 2026-11-13 |
+| Phase | Aim | State on 2026-11-14 |
 | --- | --- | --- |
-| P0 | Tracking baseline and a local request boundary for the unauthenticated API | In progress; the request checks and the local session for sync settings are merged, the branching and contribution documents are open |
+| P0 | Tracking baseline and a local request boundary for the unauthenticated API | Every outcome is checked with linked evidence: the tracking documents, the request checks, the local session for sync settings, and the contribution guide and templates. Outside contributions remain closed |
 | P1 | Connect a Google account for read-only Gmail and Calendar, as the first connection path | Planned; issues filed |
 | Not yet placed | Interoperability policy, a shared correspondence contract, evaluation of a second email adapter, an optional AI task contract, a compatibility matrix, and guided setup of the core | Planned; issues filed; priority provisional |
 | P2 | Optional workflow access | Planned; not yet tracked |
@@ -21,4 +21,4 @@ This page is a summary. The ordered outcomes are in [docs/ROADMAP.md](../ROADMAP
 
 See the [security policy](../../SECURITY.md) for the full list and for how to report a vulnerability privately.
 
-Published from commit `71011e7`. Last synchronized: 2026-11-13 (wiki revision `557ed05`).
+Published from commit `71011e7`. Last synchronized: 2026-11-13 (wiki revision `557ed05`). This draft has changed since then and has not been republished.
