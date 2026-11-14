@@ -128,7 +128,7 @@ Stage explicit paths and inspect the staged diff. These are instructions, not co
 
 ### Review, verify, and merge
 
-Open a pull request targeting `main`. Explain the outcome, affected modules, acceptance criteria, test evidence, and remaining risks. Link a real issue with `Closes #123` only when the change actually resolves it; otherwise use a non-closing reference.
+Open a pull request targeting `main`. Explain the outcome, affected modules, acceptance criteria, test evidence, and remaining risks. Link a real issue with `Closes #123` only when the change actually resolves it; otherwise use a non-closing reference such as `Part of #123`. GitHub treats a closing keyword directly before an issue number as a closing instruction even when the sentence negates it, and treats an issue linked in the pull request's sidebar the same way, so keep those words away from issue numbers that must stay open.
 
 Refresh the branch when its base becomes materially stale, resolve conflicts, and rerun affected checks. Do not rewrite another contributor's branch history without agreement. Never force-push `main` as a routine workflow.
 
@@ -178,11 +178,11 @@ NEXTUP_INTEGRATION_APPROVED=1 scripts/verify.sh
 
 Run it only with deliberate approval in the intended disposable test environment, following `docs/DEVELOPMENT.md`. The harness is not a way to test against a personal or staging database. The development notes require non-root execution and describe Docker prerequisites. This guide does not modify or bypass that process. [Verification wrapper][repo-verify]; [development notes][repo-development]
 
-The checked-in CI workflow is named `Nextup CI`, with job ID `verify`. It runs `scripts/verify_ci.py` and retains test evidence. Its presence is not proof of a successful hosted run. [CI workflow][repo-ci]
+The checked-in CI workflow is named `Nextup CI`, with job ID `verify`. It runs `scripts/verify_ci.py` on every push and pull request and retains test evidence. Hosted runs have passed on `main` (for example [this run](https://github.com/westondunn/nextup-get-hired/actions/runs/43538353763) at `7370e9a`, 2026-11-13). A passing run on `main` says nothing about a branch: each pull request needs its own result, and a push to a branch with an open pull request produces two runs of the same check. [CI workflow][repo-ci]
 
 ## 6. Existing protection versus proposed enforcement
 
-The repository API was inspected on November 13, 2026. Repository settings can change independently of commits; recheck them when adopting this guide.
+The repository API was inspected on November 13, 2026, and inspected again later the same day at commit `71011e7`; the ruleset had not changed (last updated 2026-11-13T10:22-06:00). Repository settings can change independently of commits; recheck them when relying on this table.
 
 | Control | Observed state | Recommended next action |
 | --- | --- | --- |
@@ -191,7 +191,7 @@ The repository API was inspected on November 13, 2026. Repository settings can c
 | Linear history | Required. | Use squash merging as the default. |
 | Deletion and force pushes | Deletion and non-fast-forward protections are present. | Retain both. |
 | Bypass | A role-based bypass is configured in `always` mode. | Review and narrow it where practical; document exceptional use rather than treating it as routine. |
-| Required checks | No `required_status_checks` rule appears in the inspected ruleset. | Validate hosted checks, then require their exact emitted names and expected source app. |
+| Required checks | No `required_status_checks` rule appears in the inspected ruleset. The hosted workflow emits a check named `verify`, twice for a push to a pull-request branch. | Decide whether pushes to topic branches should still trigger the workflow, then require the exact emitted name and expected source app. Any change to the trigger goes through a `ci/` branch. |
 | Review conversations | Resolution is not required by the inspected ruleset. | Consider enabling required conversation resolution. |
 | Branch naming | Not enforced by the inspected ruleset or `ci.yml`. | Adopt the policy first, then introduce and validate the check below. |
 
@@ -285,11 +285,15 @@ Also test an otherwise valid 80-character name, trailing whitespace/newlines, ev
 
 Do not combine this documentation change with unrelated application changes or public integration enablement.
 
+**Adoption status, 2026-11-13.** Slice 1 is complete: the maintainer approved the guide, and `docs/DEVELOPMENT.md` links to it. Slices 2 to 4 have not started, so nothing in this guide is enforced automatically.
+
 ### Review and validation record
 
 Repository evidence reviewed includes `README.md`, `SECURITY.md`, `docs/DEVELOPMENT.md`, `docs/CORRESPONDENCE_SYNC.md`, `backend/app/config.py`, `backend/tests/test_config.py`, `scripts/verify.sh`, and `.github/workflows/ci.yml`, together with the current `main` ref and active ruleset. The branch and commit were rechecked for this document; unchanged evidence from the earlier review was reused where applicable.
 
 Document checks: The embedded validator was executed locally against 60 named positive/negative cases (28 accepted; 32 rejected), plus a missing-variable case. All matched the expected outcomes. Every accepted name also passed `git check-ref-format --branch`. Four representative cases passed through the exact workflow shell snippet, including the 80/81-character boundary. YAML parsing, Python syntax, shell syntax, Markdown structure, and source-reference resolution were checked. These are document/example checks, not NextUp application test results.
+
+Update, 2026-11-13, commit `71011e7`: the source-file links were re-pinned to that commit, the ruleset was read again and found unchanged, and the statements about hosted CI were corrected from run history. Thirteen pull requests were merged with this workflow by that commit; two of them showed that a closing keyword next to an issue number closes the issue even in a negated sentence, which section 4 now states. The embedded naming validator was not re-run for this update.
 
 Not performed: application runtime tests, the full disposable-stack verification, hosted execution of the proposed naming workflow, or end-to-end ruleset enforcement testing. No branches, pull requests, repository files, or GitHub settings were changed by generating this document. Owner-reported local enhancements are not treated as verified public integrations.
 
@@ -320,12 +324,12 @@ Source-file links below are pinned to the reviewed commit. The ruleset link refl
 [github-rules]: https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/managing-rulesets/available-rules-for-rulesets
 [github-security]: https://docs.github.com/en/actions/reference/security/secure-use
 [github-events]: https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows#pull_request
-[repo-readme]: https://github.com/westondunn/nextup-get-hired/blob/4aacc0e99ea4f4482454f604cdbdc24d54d883e9/README.md
-[repo-security]: https://github.com/westondunn/nextup-get-hired/blob/4aacc0e99ea4f4482454f604cdbdc24d54d883e9/SECURITY.md
-[repo-development]: https://github.com/westondunn/nextup-get-hired/blob/4aacc0e99ea4f4482454f604cdbdc24d54d883e9/docs/DEVELOPMENT.md
-[repo-classifier]: https://github.com/westondunn/nextup-get-hired/blob/4aacc0e99ea4f4482454f604cdbdc24d54d883e9/docs/CORRESPONDENCE_SYNC.md
-[repo-config]: https://github.com/westondunn/nextup-get-hired/blob/4aacc0e99ea4f4482454f604cdbdc24d54d883e9/backend/app/config.py
-[repo-tests]: https://github.com/westondunn/nextup-get-hired/blob/4aacc0e99ea4f4482454f604cdbdc24d54d883e9/backend/tests/test_config.py
-[repo-verify]: https://github.com/westondunn/nextup-get-hired/blob/4aacc0e99ea4f4482454f604cdbdc24d54d883e9/scripts/verify.sh
-[repo-ci]: https://github.com/westondunn/nextup-get-hired/blob/4aacc0e99ea4f4482454f604cdbdc24d54d883e9/.github/workflows/ci.yml
+[repo-readme]: https://github.com/westondunn/nextup-get-hired/blob/71011e788bf91cef013ef333828158ee3623d176/README.md
+[repo-security]: https://github.com/westondunn/nextup-get-hired/blob/71011e788bf91cef013ef333828158ee3623d176/SECURITY.md
+[repo-development]: https://github.com/westondunn/nextup-get-hired/blob/71011e788bf91cef013ef333828158ee3623d176/docs/DEVELOPMENT.md
+[repo-classifier]: https://github.com/westondunn/nextup-get-hired/blob/71011e788bf91cef013ef333828158ee3623d176/docs/CORRESPONDENCE_SYNC.md
+[repo-config]: https://github.com/westondunn/nextup-get-hired/blob/71011e788bf91cef013ef333828158ee3623d176/backend/app/config.py
+[repo-tests]: https://github.com/westondunn/nextup-get-hired/blob/71011e788bf91cef013ef333828158ee3623d176/backend/tests/test_config.py
+[repo-verify]: https://github.com/westondunn/nextup-get-hired/blob/71011e788bf91cef013ef333828158ee3623d176/scripts/verify.sh
+[repo-ci]: https://github.com/westondunn/nextup-get-hired/blob/71011e788bf91cef013ef333828158ee3623d176/.github/workflows/ci.yml
 [repo-ruleset]: https://github.com/westondunn/nextup-get-hired/rules/27214912

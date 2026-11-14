@@ -33,7 +33,7 @@ Full integration, migration, recovery, and browser verification uses `NEXTUP_INT
 
 ## Commit & Pull Request Guidelines
 
-History contains only `Initial public release`; no established prefix convention exists. Use concise, descriptive subjects. Describe changes, link relevant issues, report checks, and include screenshots for UI changes. Outside contributions are currently closed; consult `README.md`.
+Recent history uses short type prefixes in subjects (`docs:`, `feat:`, `fix:`, `test:`); that is practice, not an enforced rule. Branch names and pull requests follow `docs/BRANCHING.md`. Use concise, descriptive subjects. Describe changes, link relevant issues, report checks, and include screenshots for UI changes. Outside contributions are currently closed; consult `README.md`.
 
 ## Security & Configuration
 
