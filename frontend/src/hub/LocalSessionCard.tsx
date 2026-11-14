@@ -89,7 +89,7 @@ export function LocalSessionCard({ onChange }: { onChange?: (active: boolean) =>
       className={`mb-3 rounded-lg border p-4 ${state?.active ? 'border-emerald-200 bg-emerald-50/30' : 'border-slate-200'}`}
     >
       <h3 id={titleId} className="text-sm font-semibold text-slate-900">
-        Integration settings lock
+        Integrations lock
       </h3>
       <p className="text-xs text-slate-500">
         Changing or running mail and calendar sync needs this installation's setup code, entered

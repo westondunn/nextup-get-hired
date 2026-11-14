@@ -27,7 +27,7 @@ const input = () => screen.getByLabelText('Setup code') as HTMLInputElement;
 it('is a named region that reports a locked state and asks for the code', async () => {
   stubFetch(json({ configured: true, active: false }));
   render(<LocalSessionCard />);
-  expect(screen.getByRole('region', { name: 'Integration settings lock' })).toBeTruthy();
+  expect(screen.getByRole('region', { name: 'Integrations lock' })).toBeTruthy();
   await waitFor(() => expect(status()).toBe('Locked.'));
   expect(input().type).toBe('password');
   expect(input().getAttribute('autocomplete')).toBe('off');

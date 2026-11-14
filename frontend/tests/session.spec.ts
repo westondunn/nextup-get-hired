@@ -7,7 +7,7 @@ import { expect, test } from '@playwright/test';
 test('integration settings start locked and refuse a wrong code', async ({ page }) => {
   await page.goto('/');
   await page.getByRole('button', { name: 'Settings' }).click();
-  const lock = page.getByRole('region', { name: 'Integration settings lock' });
+  const lock = page.getByRole('region', { name: 'Integrations lock' });
   await expect(lock.getByRole('status')).toHaveText('Locked.', { timeout: 20000 });
 
   const unlock = lock.getByRole('button', { name: 'Unlock' });
