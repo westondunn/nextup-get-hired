@@ -16,6 +16,7 @@ from app.config import get_settings
 from app.correspondence_tasks import review_count, sync_calendar_task, sync_gmail_task
 from app.db import get_session
 from app.followup_tasks import INBOUND_REPLY_RULE
+from app.local_session import require_session
 from app.models import CorrespondenceSyncSettings, FollowUpRule
 from app.sources.gmail import credentials_present
 
@@ -72,7 +73,8 @@ def read_correspondence(session: Database):
     return _out(session.get(CorrespondenceSyncSettings, 1), session)
 
 
-@router.put("")
+# Changing or triggering sync needs a local session (docs/decisions/0001-local-session-boundary.md).
+@router.put("", dependencies=[Depends(require_session)])
 def save_correspondence(body: CorrespondenceInput, session: Database):
     settings = get_settings()
     if body.enabled and not (settings.gmail_sync_enabled and credentials_present(settings)):
@@ -125,7 +127,7 @@ def _ensure_reply_rule(session: Session) -> None:
     )
 
 
-@router.post("/sync", status_code=202)
+@router.post("/sync", status_code=202, dependencies=[Depends(require_session)])
 def run_sync(session: Database):
     config = session.get(CorrespondenceSyncSettings, 1)
     tasks = []

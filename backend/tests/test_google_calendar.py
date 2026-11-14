@@ -202,7 +202,7 @@ def test_sync_calendar_records_provider_failure():
 
 
 @pytest.fixture
-def api_session():
+def api_session(local_session):
     database = MagicMock()
     database.get.return_value = None
     database.scalar.return_value = 0

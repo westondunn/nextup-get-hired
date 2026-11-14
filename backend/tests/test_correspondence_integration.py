@@ -28,9 +28,11 @@ from app.models import (
     PursuitEvent,
 )
 
-pytestmark = pytest.mark.skipif(
-    os.environ.get("RUN_INTEGRATION") != "1", reason="Requires PostgreSQL"
-)
+pytestmark = [
+    pytest.mark.skipif(os.environ.get("RUN_INTEGRATION") != "1", reason="Requires PostgreSQL"),
+    # These suites exercise sync behaviour; the session requirement has its own tests.
+    pytest.mark.usefixtures("local_session"),
+]
 
 
 def test_sync_persists_review_queue_and_linking_records_reply(

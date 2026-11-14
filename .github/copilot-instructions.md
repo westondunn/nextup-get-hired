@@ -63,8 +63,9 @@ confirmation.
 
 - The API has no authentication. Preserve loopback-only port publishing; never expose it to
   a network. `request_boundary.py` refuses non-local host names and cross-origin
-  state-changing requests, and `local_session.py` provides session routes that no route
-  requires yet; neither is authentication.
+  state-changing requests, and `local_session.py` provides a local session that only the
+  routes changing or running correspondence sync require (`require_session`); neither is
+  authentication.
 - `docs/INTEGRATIONS.md` records implementation status and support status separately. Do
   not describe a disabled or untested integration as supported.
 - Keep tests synthetic. `backend/tests/conftest.py` isolates developer configuration and

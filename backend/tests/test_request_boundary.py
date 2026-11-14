@@ -3,6 +3,7 @@
 import logging
 
 import pytest
+import route_helpers
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
@@ -227,5 +228,7 @@ def test_environment_comes_from_the_deployment_identity():
 def test_every_route_method_is_a_read_or_covered_by_the_cross_origin_check():
     """A route added with an unlisted method would bypass layer 2; fail here instead."""
     covered = request_boundary.STATE_CHANGING_METHODS | {"GET", "HEAD", "OPTIONS"}
-    for route in real_app.routes:
+    routes = route_helpers.api_routes(real_app)
+    assert len(routes) > 50  # the walk reached the feature routers
+    for route in routes:
         assert set(getattr(route, "methods", None) or ()) <= covered, route.path
