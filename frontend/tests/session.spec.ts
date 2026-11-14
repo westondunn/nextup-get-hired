@@ -8,7 +8,8 @@ test('integration settings start locked and refuse a wrong code', async ({ page 
   await page.goto('/');
   await page.getByRole('button', { name: 'Settings' }).click();
   const lock = page.getByRole('region', { name: 'Integrations lock' });
-  await expect(lock.getByRole('status')).toHaveText('Locked.', { timeout: 20000 });
+  const state = lock.locator('[aria-live="polite"]');
+  await expect(state).toHaveText('Locked.', { timeout: 20000 });
 
   const unlock = lock.getByRole('button', { name: 'Unlock' });
   await expect(unlock).toBeDisabled();
@@ -22,7 +23,7 @@ test('integration settings start locked and refuse a wrong code', async ({ page 
   await expect(lock.getByRole('alert')).toHaveText('That code was not accepted.', {
     timeout: 10000,
   });
-  await expect(lock.getByRole('status')).toHaveText('Locked.');
+  await expect(state).toHaveText('Locked.');
   await expect(code).toHaveValue('');
 });
 

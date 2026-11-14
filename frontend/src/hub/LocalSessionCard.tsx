@@ -95,7 +95,9 @@ export function LocalSessionCard({ onChange }: { onChange?: (active: boolean) =>
         Changing or running mail and calendar sync needs this installation's setup code, entered
         once in this browser.
       </p>
-      <p role="status" className="mt-2 text-xs font-medium text-slate-700">
+      {/* A polite live region, not role="status": the page already has one status region, and
+          existing browser tests rely on it being the only one. */}
+      <p aria-live="polite" aria-atomic="true" className="mt-2 text-xs font-medium text-slate-700">
         {status}
       </p>
 

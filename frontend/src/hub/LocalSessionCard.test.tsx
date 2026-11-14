@@ -21,7 +21,10 @@ function stubFetch(...responses: Array<Response | Error>) {
   return fetch;
 }
 
-const status = () => screen.getByRole('status').textContent;
+const status = () =>
+  screen
+    .getByRole('region', { name: 'Integrations lock' })
+    .querySelector('[aria-live="polite"][aria-atomic="true"]')?.textContent;
 const input = () => screen.getByLabelText('Setup code') as HTMLInputElement;
 
 it('is a named region that reports a locked state and asks for the code', async () => {
