@@ -1,6 +1,6 @@
 # Integrations
 
-> Unpublished draft for a new wiki Integrations page. Publish only after its source is merged; see [README.md](README.md) in this directory.
+> Repository copy of the published wiki [Integrations](https://github.com/westondunn/nextup-get-hired/wiki/Integrations) page. See [README.md](README.md) in this directory.
 
 This page is a summary. The full record is [docs/INTEGRATIONS.md](../INTEGRATIONS.md), and the direction behind it is [decision 0002](../decisions/0002-standards-first-interoperability.md).
 
@@ -14,4 +14,4 @@ As of 2026-11-13:
 
 NextUp describes support in three terms, each of which needs evidence: **Tested**, **Experimental** and **Custom connection**. A protocol name or a successful connection is not treated as support.
 
-Source commit: to be filled in at publication. Last synchronized: not published.
+Published from commit `ea8b896`. Last synchronized: 2026-11-13 (wiki revision `accaa0b`).
