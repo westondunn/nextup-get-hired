@@ -138,6 +138,8 @@ After confirming the pull request is merged and contains all intended work, dele
 
 ### Pull request evidence template
 
+The repository's pull-request template, `.github/pull_request_template.md`, carries these headings. Change both together.
+
 ```markdown
 ## Outcome
 What changes for the user or maintainer? What is explicitly out of scope?
@@ -285,7 +287,9 @@ Also test an otherwise valid 80-character name, trailing whitespace/newlines, ev
 
 Do not combine this documentation change with unrelated application changes or public integration enablement.
 
-**Adoption status, 2026-11-13.** Slice 1 is complete: the maintainer approved the guide, and `docs/DEVELOPMENT.md` links to it. Slices 2 to 4 have not started, so nothing in this guide is enforced automatically.
+**Adoption status, 2026-11-13.** Slice 1 is complete: the maintainer approved the guide, and `docs/DEVELOPMENT.md` links to it. Slices 2 and 3 have not started, so nothing in this guide is enforced automatically.
+
+**Adoption status, 2026-11-14.** Slice 4 is done in the files: `CONTRIBUTING.md` and `.github/pull_request_template.md` reference this guide and repeat neither the prefix list nor the naming rules. Outside contributions remain closed.
 
 ### Review and validation record
 

@@ -33,7 +33,7 @@ Full integration, migration, recovery, and browser verification uses `NEXTUP_INT
 
 ## Commit & Pull Request Guidelines
 
-Recent history uses short type prefixes in subjects (`docs:`, `feat:`, `fix:`, `test:`); that is practice, not an enforced rule. Branch names and pull requests follow `docs/BRANCHING.md`. Use concise, descriptive subjects. Describe changes, link relevant issues, report checks, and include screenshots for UI changes. Outside contributions are currently closed; consult `README.md`.
+Recent history uses short type prefixes in subjects (`docs:`, `feat:`, `fix:`, `test:`); that is practice, not an enforced rule. Branch names and pull requests follow `docs/BRANCHING.md`. Use concise, descriptive subjects. Describe changes, link relevant issues, report checks, and include screenshots for UI changes. Outside contributions are currently closed; the policy is in `CONTRIBUTING.md`. Pull requests use `.github/pull_request_template.md`.
 
 ## Security & Configuration
 
