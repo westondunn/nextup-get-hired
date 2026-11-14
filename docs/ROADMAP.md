@@ -2,7 +2,7 @@
 
 This page lists the planned outcomes. P0 and P1 are in order; the section added after them is not yet placed. It is public planning for a pre-release project. Outside contributions are not being accepted yet (see the [README](../README.md#development-and-contributions)), so nothing here is an invitation to start work.
 
-**Snapshot date: 2026-11-13, last reconciled at commit `7370e9a`.** Status, scope and acceptance criteria live in the linked issues; where this page and an issue disagree, the issue is right. The parent tracking issue is [#3](https://github.com/westondunn/nextup-get-hired/issues/3). There is no GitHub Project for this repository.
+**Snapshot date: 2026-11-13, last reconciled at commit `314d8b8`.** Status, scope and acceptance criteria live in the linked issues; where this page and an issue disagree, the issue is right. The parent tracking issue is [#3](https://github.com/westondunn/nextup-get-hired/issues/3). There is no GitHub Project for this repository.
 
 An outcome is checked only when its completion gate is met and the evidence is linked. A branch, an open pull request or a closed issue does not check it. Readiness gates for a public release are in the [release checklist](RELEASE_CHECKLIST.md).
 
@@ -27,14 +27,14 @@ Branch names below are suggestions that follow the [branching guide](BRANCHING.m
   - Complete when: both documents are merged with every link verified, and wiki drafts are staged as unpublished
   - Evidence: merged in [#15](https://github.com/westondunn/nextup-get-hired/pull/15) as `6548863`; [hosted CI run on `main`](https://github.com/westondunn/nextup-get-hired/actions/runs/43491072504); completion record in [#4](https://github.com/westondunn/nextup-get-hired/issues/4). The Home and Roadmap wiki pages were published afterwards; see [wiki/README.md](wiki/README.md)
 
-- [ ] **Outcome: the development notes link to the branching guide and describe hosted CI accurately**
+- [x] **Outcome: the development notes link to the branching guide and describe hosted CI accurately**
   - Tracking: [#5](https://github.com/westondunn/nextup-get-hired/issues/5)
   - Priority and dependencies: P0; none
-  - Suggested branch: `docs/5-branching-adoption`
+  - Suggested branch: `docs/5-branching-adoption` (used as suggested)
   - Contributor notes: `docs/DEVELOPMENT.md`, `docs/BRANCHING.md`; no naming check or ruleset change
   - Contribution availability: maintainer-only
   - Complete when: the guide is linked and every hosted-CI statement cites a run
-  - Evidence: pending
+  - Evidence: merged in [#33](https://github.com/westondunn/nextup-get-hired/pull/33) as `ddb1022`; [hosted CI run on `main`](https://github.com/westondunn/nextup-get-hired/actions/runs/43545101394) at `314d8b8`, the first run that includes it. The development notes link the guide and cite a hosted run; branch naming is still not enforced
 
 - [ ] **Outcome: a contribution guide and issue and pull-request templates exist, with contributions still closed**
   - Tracking: [#6](https://github.com/westondunn/nextup-get-hired/issues/6)

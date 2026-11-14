@@ -2,7 +2,7 @@
 
 These are the gates that must be met before NextUp, or any of its integrations, is described as publicly supported. A gate is checked only when the evidence is linked next to it. A merged pull request or a closed issue is not evidence on its own.
 
-**Snapshot date: 2026-11-13, last reconciled at commit `7370e9a`.** Two gates are met; the rest are open. A gate that states a target is met by a recorded result, never by the target being written down. The ordered work is in the [roadmap](ROADMAP.md); scope and acceptance criteria are in the linked issues.
+**Snapshot date: 2026-11-13, last reconciled at commit `314d8b8`.** Three gates are met; the rest are open. A gate that states a target is met by a recorded result, never by the target being written down. The ordered work is in the [roadmap](ROADMAP.md); scope and acceptance criteria are in the linked issues.
 
 ## Core application
 
@@ -56,7 +56,7 @@ These apply to each integration a release lets users enable. The Google gates be
 
 - [ ] The README status table matches the evidence above. Evidence: pending.
 - [ ] No public document or wiki page claims that any AI subscription works, that every email provider works, that NextUp is fully local while an enabled integration sends data elsewhere, that it is production-ready, secure or supported without evidence, or that setup is one click ([#23](https://github.com/westondunn/nextup-get-hired/issues/23)). Evidence: pending.
-- [ ] `docs/DEVELOPMENT.md` describes hosted CI and the branching guide accurately ([#5](https://github.com/westondunn/nextup-get-hired/issues/5)). Evidence: pending.
+- [x] `docs/DEVELOPMENT.md` describes hosted CI and the branching guide accurately ([#5](https://github.com/westondunn/nextup-get-hired/issues/5)). Evidence: merged in [#33](https://github.com/westondunn/nextup-get-hired/pull/33) as `ddb1022`; [hosted CI run on `main`](https://github.com/westondunn/nextup-get-hired/actions/runs/43545101394) at `314d8b8`, the first run that includes it. The development notes link the guide and cite a hosted run; branch naming is still not enforced. This reflects the documents at that commit; it must be rechecked at the release commit.
 - [ ] The contribution policy is stated in one place and matches the README ([#6](https://github.com/westondunn/nextup-get-hired/issues/6)). Evidence: pending.
 - [ ] Wiki summaries are published from the merged documents, each recording its source commit and synchronization date. Evidence: pending; see [wiki drafts](wiki/README.md).
 
