@@ -2,7 +2,7 @@
 
 These are the gates that must be met before NextUp, or any of its integrations, is described as publicly supported. A gate is checked only when the evidence is linked next to it. A merged pull request or a closed issue is not evidence on its own.
 
-**Snapshot date: 2026-11-13, last reconciled at commit `81ac008`.** One gate is met; the rest are open. A gate that states a target is met by a recorded result, never by the target being written down. The ordered work is in the [roadmap](ROADMAP.md); scope and acceptance criteria are in the linked issues.
+**Snapshot date: 2026-11-13, last reconciled at commit `7370e9a`.** Two gates are met; the rest are open. A gate that states a target is met by a recorded result, never by the target being written down. The ordered work is in the [roadmap](ROADMAP.md); scope and acceptance criteria are in the linked issues.
 
 ## Core application
 
@@ -14,7 +14,7 @@ These are the gates that must be met before NextUp, or any of its integrations, 
 
 - [ ] Every shipped configuration publishes ports on the loopback interface only. Evidence: pending.
 - [x] Requests to a non-local host name and cross-origin state-changing requests are refused ([#8](https://github.com/westondunn/nextup-get-hired/issues/8)). Evidence: merged in [#20](https://github.com/westondunn/nextup-get-hired/pull/20) as `baf9028`; [hosted CI run on `main`](https://github.com/westondunn/nextup-get-hired/actions/runs/43509731795), which includes the integration, browser and secret-audit checks; local probes of the development stack are recorded in the pull request.
-- [ ] Integration and credential routes require a local session ([#18](https://github.com/westondunn/nextup-get-hired/issues/18)). Evidence: partial; the session routes exist ([#22](https://github.com/westondunn/nextup-get-hired/pull/22), `81ac008`) but no route requires a session yet.
+- [x] Integration and credential routes require a local session ([#18](https://github.com/westondunn/nextup-get-hired/issues/18)). Evidence: the setup code and session routes were merged in [#22](https://github.com/westondunn/nextup-get-hired/pull/22) as `81ac008`, and the session requirement and Settings prompt in [#31](https://github.com/westondunn/nextup-get-hired/pull/31) as `7370e9a`; [hosted CI run on `main`](https://github.com/westondunn/nextup-get-hired/actions/runs/43538353763), which includes the integration suites, the live-stack session test, the browser tests and the secret audit; local probes of the development stack are recorded in both pull requests. The routes covered today are the two that change or run mail and calendar sync; routes added for a connection must be added to the same requirement.
 - [ ] `SECURITY.md` states the authentication limits as they are at the release commit. Evidence: pending.
 - [ ] Pinned migration history is unchanged and every schema change is a new revision applied through the guard. Evidence: pending.
 - [ ] The verification run's secret audit passes at the release commit. Evidence: pending.

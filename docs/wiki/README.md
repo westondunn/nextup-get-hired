@@ -1,6 +1,6 @@
 # Wiki drafts
 
-The files in this directory are the reviewed sources for the [GitHub wiki](https://github.com/westondunn/nextup-get-hired/wiki). As of 2026-11-13 the Home, Roadmap and Integrations pages are published (wiki revision `accaa0b`, from repository commit `ea8b896`). The other pages are not drafted.
+The files in this directory are the reviewed sources for the [GitHub wiki](https://github.com/westondunn/nextup-get-hired/wiki). As of 2026-11-13 the Home, Roadmap and Integrations pages are published (wiki revision `accaa0b`, from repository commit `ea8b896`). The Roadmap draft here has changed since then and has not been republished. The other pages are not drafted.
 
 The wiki is a separate Git repository with no pull-request review. To keep one reviewed source, wiki pages are short summaries that link back to the canonical documents here and to the live issues.
 
@@ -9,7 +9,7 @@ The wiki is a separate Git repository with no pull-request review. To keep one r
 | Draft | Wiki page | Canonical source | Status |
 | --- | --- | --- | --- |
 | [Home.md](Home.md) | [Home](https://github.com/westondunn/nextup-get-hired/wiki) | [README.md](../../README.md) | Published 2026-11-13 from `ea8b896` |
-| [Roadmap.md](Roadmap.md) | [Roadmap](https://github.com/westondunn/nextup-get-hired/wiki/Roadmap) | [docs/ROADMAP.md](../ROADMAP.md), [docs/RELEASE_CHECKLIST.md](../RELEASE_CHECKLIST.md) | Published 2026-11-13 from `ea8b896` |
+| [Roadmap.md](Roadmap.md) | [Roadmap](https://github.com/westondunn/nextup-get-hired/wiki/Roadmap) | [docs/ROADMAP.md](../ROADMAP.md), [docs/RELEASE_CHECKLIST.md](../RELEASE_CHECKLIST.md) | Published 2026-11-13 from `ea8b896`; draft changed since, not republished |
 | not drafted | Contributor Guide | `CONTRIBUTING.md` (not yet written) | Waiting on the source |
 | not drafted | Architecture | README architecture section, [decision records](../decisions/) | Not drafted |
 | [Integrations.md](Integrations.md) | Integrations | [docs/INTEGRATIONS.md](../INTEGRATIONS.md), [decision 0002](../decisions/0002-standards-first-interoperability.md) | Published 2026-11-13 from `ea8b896` |
