@@ -2,7 +2,7 @@
 
 These are the gates that must be met before NextUp, or any of its integrations, is described as publicly supported. A gate is checked only when the evidence is linked next to it. A merged pull request or a closed issue is not evidence on its own.
 
-**Snapshot date: 2026-11-14, last reconciled at commit `e9628bd`.** Four gates are met; the rest are open. A gate that states a target is met by a recorded result, never by the target being written down. The ordered work is in the [roadmap](ROADMAP.md); scope and acceptance criteria are in the linked issues.
+**Snapshot date: 2026-11-14, last reconciled at commit `325cc46`.** Four gates are met; the rest are open. A gate that states a target is met by a recorded result, never by the target being written down. The ordered work is in the [roadmap](ROADMAP.md); scope and acceptance criteria are in the linked issues.
 
 ## Core application
 
@@ -36,7 +36,7 @@ These apply to each integration a release lets users enable. The Google gates be
 - [ ] Tokens are stored server-side, encrypted at rest, and never returned to the browser or written to logs ([#10](https://github.com/westondunn/nextup-get-hired/issues/10)). Evidence: pending.
 - [ ] Only read-only Gmail and Calendar scopes are requested. Evidence: pending.
 - [ ] Settings shows connection state, granted capabilities, last successful sync and actionable errors, with accessibility coverage ([#12](https://github.com/westondunn/nextup-get-hired/issues/12)). Evidence: pending.
-- [ ] Calendar import and display are tested across UTC and America/Chicago daylight-saving boundaries ([#13](https://github.com/westondunn/nextup-get-hired/issues/13)). Evidence: pending.
+- [ ] Calendar import and display are tested across UTC and America/Chicago daylight-saving boundaries ([#13](https://github.com/westondunn/nextup-get-hired/issues/13)), and the defects those tests found are corrected ([#38](https://github.com/westondunn/nextup-get-hired/issues/38), [#39](https://github.com/westondunn/nextup-get-hired/issues/39)). Evidence so far: the tests merged in [#40](https://github.com/westondunn/nextup-get-hired/pull/40) as `325cc46` and ran in [this hosted run on `main`](https://github.com/westondunn/nextup-get-hired/actions/runs/43654485058). The gate stays open while either defect is held as an expected failure.
 - [ ] The setup and rollback instructions have been followed on a clean machine, with a dated record for each platform claimed ([#14](https://github.com/westondunn/nextup-get-hired/issues/14)). Evidence: pending.
 
 ## Optional AI assistance (only if a release offers it)
