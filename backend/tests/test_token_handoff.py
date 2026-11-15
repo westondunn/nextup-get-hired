@@ -15,6 +15,7 @@ from unittest.mock import MagicMock
 import pytest
 from alembic import command
 from test_env_authorization import (
+    HEAD,
     NOW,
     SENTINEL,
     FakeConnection,
@@ -79,7 +80,7 @@ def through_ledger(migrator, monkeypatch):
         connection=FakeConnection(rows_for(migrator.identity)),
         now=NOW + 5,
         seen=[],
-        run=Recorder(after=initialized_after(migrator.identity, "0029")),
+        run=Recorder(after=initialized_after(migrator.identity, HEAD)),
     )
     monkeypatch.setattr(
         guard, "migration_engine", lambda *_a, **_k: SimpleNamespace(dispose=lambda: None)
@@ -92,7 +93,7 @@ def through_ledger(migrator, monkeypatch):
             settings,
             token,
             operation=operation,
-            target="0029",
+            target=HEAD,
             run=state.run,
             now=state.now,
         )
@@ -122,7 +123,7 @@ class TestStdinHandoff:
     def test_plan_never_prints_the_token(self, migrator, monkeypatch):
         token = "nxa1." + "p" * 60 + "." + "m" * 43
         decision = SimpleNamespace(
-            mode="INIT", steps=("0001",), data_changing_steps=(), from_revision=None, target="0029"
+            mode="INIT", steps=("0001",), data_changing_steps=(), from_revision=None, target=HEAD
         )
         monkeypatch.setattr(
             guard, "migration_engine", lambda *_a, **_k: SimpleNamespace(dispose=lambda: None)
@@ -145,7 +146,7 @@ def session(migrator, monkeypatch):
         now=NOW + 5,
         planned=[],
         applied=[],
-        run=Recorder(after=initialized_after(migrator.identity, "0029")),
+        run=Recorder(after=initialized_after(migrator.identity, HEAD)),
     )
     monkeypatch.setattr(
         guard, "migration_engine", lambda *_a, **_k: SimpleNamespace(dispose=lambda: None)
@@ -165,7 +166,7 @@ def session(migrator, monkeypatch):
             settings,
             token,
             operation=operation,
-            target="0029",
+            target=HEAD,
             run=state.run,
             now=state.now,
         )
@@ -181,7 +182,7 @@ class TestPlanApply:
         self, session, monkeypatch
     ):
         code, out, err = run(["plan-apply"], Stdin(CODE + "\n"), monkeypatch)
-        assert code == 0 and "APPLIED mode=INIT to=0029" in out
+        assert code == 0 and f"APPLIED mode=INIT to={HEAD}" in out
         assert f"confirmation={CODE} " in out and "awaiting confirmation" in out
         token = session.planned[0]
         assert session.applied == [token] and len(session.run.calls) == 1
@@ -200,7 +201,7 @@ class TestPlanApply:
 
     def test_nothing_to_apply_never_reads_stdin(self, migrator, monkeypatch):
         decision = SimpleNamespace(
-            mode="NOOP", steps=(), data_changing_steps=(), from_revision="0029", target="0029"
+            mode="NOOP", steps=(), data_changing_steps=(), from_revision=HEAD, target=HEAD
         )
         monkeypatch.setattr(
             guard, "migration_engine", lambda *_a, **_k: SimpleNamespace(dispose=lambda: None)
@@ -259,7 +260,7 @@ class TestPlanApply:
             steps=("0001",),
             data_changing_steps=(),
             from_revision=None,
-            target="0029",
+            target=HEAD,
             changes_schema=True,
         )
         monkeypatch.setattr(guard, "migration_engine", lambda settings, **_: engine)
@@ -282,7 +283,7 @@ class TestPlanApply:
         calls.clear()
         monkeypatch.setattr(cli.secrets, "token_hex", lambda n: CODE)
         assert run(["plan-apply"], Stdin(CODE + "\n"), monkeypatch)[0] == 0
-        assert programmatic == calls == [("plan", "upgrade"), ("apply", "nxa1.p.m", "0029")]
+        assert programmatic == calls == [("plan", "upgrade"), ("apply", "nxa1.p.m", HEAD)]
 
 
 class TestRefusal:

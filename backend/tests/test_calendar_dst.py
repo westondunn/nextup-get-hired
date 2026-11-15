@@ -432,7 +432,10 @@ def test_import_stores_instants_and_is_stable_across_a_transition(
     timed_rows = [rows[event_id] for event_id in stored]
     assert sorted(timed_rows, key=lambda row: row.received_at) == timed_rows
 
-    # An all-day event is stored at midnight UTC of its date; "all day" survives only in the note.
+    # An all-day event is stored at midnight UTC of its date and flagged, so that the date can
+    # be shown without converting that instant to the viewer's zone.
+    assert rows["day"].all_day is True
+    assert [row.all_day for row in timed_rows] == [False] * len(timed_rows)
     assert rows["day"].received_at == datetime.combine(
         date.fromisoformat(day), datetime.min.time(), UTC
     )
@@ -465,3 +468,29 @@ def test_a_one_hour_move_across_the_transition_updates_the_stored_instant():
     # 01:30 CST to 03:30 CDT looks like two hours on the wall clock and is one hour later.
     assert stored["before"].received_at == utc(2027, 3, 14, 8, 30)
     assert session.added == []
+
+
+def test_an_event_stored_before_the_flag_existed_gets_it_on_the_next_sync():
+    now = utc(2027, 3, 13, 12)
+    _, session, _ = run_sync([all_day("day", "2027-03-14")], now)
+    stored = session.added[0]
+    stored.all_day = False  # as the migration leaves every existing row
+    result, session, _ = run_sync([all_day("day", "2027-03-14")], now, existing=[stored])
+    assert result == {"status": "ok", "imported": 0, "updated": 1}
+    assert stored.all_day is True and session.added == []
+    # Only the flag changed, and a further sync changes nothing.
+    assert stored.received_at == utc(2027, 3, 14) and stored.body.startswith("When: all day")
+    result, _, _ = run_sync([all_day("day", "2027-03-14")], now, existing=[stored])
+    assert result == {"status": "ok", "imported": 0, "updated": 0}
+
+
+def test_an_event_changed_between_all_day_and_timed_updates_the_flag():
+    now = utc(2027, 3, 13, 12)
+    _, session, _ = run_sync([all_day("e", "2027-03-14")], now)
+    stored = session.added[0]
+    # The same instant, now as an event that really starts at midnight UTC.
+    result, _, _ = run_sync([timed("e", "2027-03-14T00:00:00Z")], now, existing=[stored])
+    assert result["updated"] == 1 and stored.all_day is False
+    assert stored.received_at == utc(2027, 3, 14)
+    result, _, _ = run_sync([all_day("e", "2027-03-14")], now, existing=[stored])
+    assert result["updated"] == 1 and stored.all_day is True

@@ -628,6 +628,8 @@ class Communication(Base):
     )
     # Local classification of imported mail (application_detect); NULL until classified.
     detection: Mapped[dict | None] = mapped_column(JSONB(none_as_null=True))
+    # An all-day calendar event: received_at is then midnight UTC of its date, not an instant.
+    all_day: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
