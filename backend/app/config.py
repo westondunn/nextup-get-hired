@@ -482,7 +482,11 @@ def _check_integrations(settings: Settings, env: str) -> None:
                 env=env,
             )
         return
-    if google_on and len(present(GOOGLE_FIELDS)) != len(GOOGLE_FIELDS):
+    # With a sync flag on, the three Google secrets are the fallback credential and must be
+    # complete or absent. Absent is valid: credentials can be stored through the connection
+    # routes instead, and until a connection exists nothing is sent to Google
+    # (docs/decisions/0003-google-connection.md, section 9).
+    if google_on and 0 < len(present(GOOGLE_FIELDS)) < len(GOOGLE_FIELDS):
         missing = [env_name(n) for n in GOOGLE_FIELDS if n not in present(GOOGLE_FIELDS)]
         raise ConfigError("NXG-C08", keys=tuple(missing), env=env)
     if settings.fixture_data_mode:

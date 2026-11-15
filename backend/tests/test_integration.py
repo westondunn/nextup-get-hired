@@ -149,3 +149,34 @@ def test_the_api_container_can_store_a_sealed_credential_in_the_connection_table
                 session.delete(row)
     with Session(get_engine()) as session:
         assert session.get(GoogleConnection, 1) is None
+
+
+def test_the_running_stack_refuses_to_store_a_google_client():
+    """The CI stack runs in fixture data mode, so the connection routes store nothing.
+
+    Assertions compare status codes and fixed values only, so a failure never prints the code.
+    """
+    client_body = {
+        "client_id": "123456789012-synthetic0client.apps.googleusercontent.com",
+        "client_secret": "synthetic-client-secret",
+    }
+    code = get_settings().setup_code.get_secret_value()
+    with httpx.Client(base_url="http://api:8000", timeout=20) as client:
+        assert client.get("/api/google/connection").status_code == 401
+        assert client.put("/api/google/client", json=client_body).status_code == 401
+        assert client.post("/api/session", json={"code": code}).status_code == 204
+        try:
+            assert client.get("/api/google/connection").json() == {
+                "available": False,
+                "unavailable_reason": "fixture_mode",
+                "client_configured": False,
+                "client_id": None,
+                "state": "not_configured",
+            }
+            refused = client.put("/api/google/client", json=client_body)
+            assert refused.status_code == 409
+            assert client_body["client_secret"] not in refused.text
+        finally:
+            assert client.delete("/api/session").status_code == 204
+    with Session(get_engine()) as session:
+        assert session.get(GoogleConnection, 1) is None

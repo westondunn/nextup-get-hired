@@ -1,6 +1,7 @@
 """Configuration contract. Pure: explicit environ dicts, no services."""
 
 import importlib.util
+import itertools
 import logging
 import os
 import tempfile
@@ -396,19 +397,34 @@ class Integrations(Refusals):
         defaults = Settings()
         self.assertFalse(defaults.gmail_sync_enabled or defaults.live_job_fetch_enabled)
 
-    def test_activation_requires_its_settings(self):
-        self.refused("NXG-C08", env(NEXTUP_GMAIL_SYNC_ENABLED="true"))
-        self.refused(
-            "NXG-C08", env(NEXTUP_CALENDAR_SYNC_ENABLED="true", NEXTUP_GOOGLE_OAUTH_CLIENT_ID="id")
-        )
+    def test_google_fallback_credentials_are_complete_or_absent(self):
         google = {
             "NEXTUP_GOOGLE_OAUTH_CLIENT_ID": "id",
             "NEXTUP_GOOGLE_OAUTH_CLIENT_SECRET": SENTINEL,
             "NEXTUP_GMAIL_REFRESH_TOKEN": SENTINEL,
         }
-        self.assertTrue(
-            load_settings(env(NEXTUP_GMAIL_SYNC_ENABLED="true", **google)).gmail_sync_enabled
-        )
+        for flag in ("NEXTUP_GMAIL_SYNC_ENABLED", "NEXTUP_CALENDAR_SYNC_ENABLED"):
+            # One or two of the three is a half-configured integration and is refused,
+            # naming only what is missing.
+            for size in (1, 2):
+                for some in itertools.combinations(google, size):
+                    with self.subTest(flag=flag, present=some):
+                        refusal = self.refused(
+                            "NXG-C08",
+                            env(**{flag: "true"}, **{name: google[name] for name in some}),
+                        )
+                        self.assertEqual(set(refusal.keys), set(google) - set(some))
+            # All three is the fallback credential. None is valid too: credentials can be
+            # stored through the connection routes (decision 0003, section 9).
+            complete = load_settings(env(**{flag: "true"}, **google))
+            self.assertTrue(complete.google_oauth_client_secret.get_secret_value())
+            absent = load_settings(env(**{flag: "true"}))
+            self.assertTrue(absent.gmail_sync_enabled or absent.calendar_sync_enabled)
+            for name in ("google_oauth_client_id", "google_oauth_client_secret"):
+                self.assertEqual(getattr(absent, name).get_secret_value(), "")
+            self.assertEqual(absent.gmail_refresh_token.get_secret_value(), "")
+
+    def test_activation_requires_its_settings(self):
         self.refused("NXG-C08", env(NEXTUP_FIXTURE_DATA_MODE="true"))
         self.assertTrue(load_settings(env("ci", NEXTUP_FIXTURE_DATA_MODE="true")).fixture_data_mode)
         self.refused("NXG-C16", env("ci", NEXTUP_FIXTURE_FETCH_ENABLED="true"))  # retired name
