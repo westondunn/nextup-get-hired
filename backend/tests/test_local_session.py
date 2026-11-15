@@ -306,6 +306,7 @@ PROTECTED = [
     ("POST", "/api/correspondence/sync"),
     ("GET", "/api/google/connection"),
     ("PUT", "/api/google/client"),
+    ("POST", "/api/google/connect"),
 ]
 
 
@@ -347,6 +348,7 @@ def test_protected_routes_are_reached_with_a_session(app_client, monkeypatch, me
     client, _ = app_client
     monkeypatch.setattr("app.correspondence.get_settings", lambda: Settings())
     monkeypatch.setattr("app.google_connection.get_settings", lambda: Settings())
+    monkeypatch.setattr("app.google_consent.get_settings", lambda: Settings())
     assert start(client).status_code == 204
     response = client.request(method, path, json={"enabled": "not-a-boolean"})
     # Past the session check: the route's own validation or state answers instead. A
@@ -379,3 +381,7 @@ def test_only_the_intended_routes_require_a_session():
         if require_session in calls:
             requiring |= {(m, route.path) for m in route.methods}
     assert requiring == set(PROTECTED)
+    # The consent callback is the one Google route without it: Google's redirect arrives
+    # without the session cookie (docs/decisions/0003-google-connection.md, section 4).
+    google = {(m, r.path) for r in routes for m in r.methods if r.path.startswith("/api/google")}
+    assert google - requiring == {("GET", "/api/google/callback")}

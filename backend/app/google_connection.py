@@ -4,7 +4,7 @@ See docs/decisions/0003-google-connection.md. The user registers an OAuth client
 Google and enters its ID and secret here, under a local session. The secret is sealed by
 ``app.token_vault`` before it is stored and is never returned.
 
-Nothing in this module contacts Google. The consent flow is a separate step.
+Nothing in this module contacts Google. The consent flow is in ``app.google_consent``.
 Nothing here logs or returns a client secret, and no error repeats what was submitted.
 """
 
@@ -23,6 +23,7 @@ from app.db import get_session
 from app.local_session import require_session
 from app.models import GoogleConnection
 from app.sources.common import SourceError, require_live_requests
+from app.sources.google_oauth import capabilities_of
 
 router = APIRouter(prefix="/api/google", tags=["google"])
 Database = Annotated[Session, Depends(get_session)]
@@ -71,7 +72,8 @@ def unavailable_reason(settings: Settings) -> str | None:
     return None
 
 
-def _require_available(settings: Settings) -> None:
+def require_available(settings: Settings) -> None:
+    """Refuse with a fixed message when no connection can be stored here."""
     reason = unavailable_reason(settings)
     if reason == "fixture_mode":
         raise HTTPException(409, FIXTURE_MODE)
@@ -106,6 +108,9 @@ def _out(row: GoogleConnection | None, settings: Settings) -> dict:
         "client_configured": row is not None,
         "client_id": row.client_id if row is not None else None,
         "state": _state(row, settings),
+        # What Google granted, whatever was asked for and whatever NextUp is set to use.
+        "granted_capabilities": list(capabilities_of(row.granted_scopes or [])) if row else [],
+        "account_address": row.account_address if row is not None else None,
     }
 
 
@@ -146,7 +151,7 @@ def read_connection(session: Database):
 @router.put("/client", dependencies=[Depends(require_session)])
 def save_client(client: SubmittedClient, session: Database):
     settings = get_settings()
-    _require_available(settings)
+    require_available(settings)
     client_id, client_secret = client
     sealed = token_vault.seal(client_secret, purpose=CLIENT_SECRET_PURPOSE, settings=settings)
     session.execute(

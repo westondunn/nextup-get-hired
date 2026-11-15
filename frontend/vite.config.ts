@@ -15,6 +15,18 @@ export default defineConfig({
         // only and compares Origin with Host (docs/decisions/0001-local-session-boundary.md).
         // A plain string target would make Vite rewrite Host to the target's.
         changeOrigin: false,
+        // When the API cannot be reached, Vite logs the address of the failed request.
+        // The address Google redirects back to carries an authorization code in its query
+        // string, which must not reach a log (docs/decisions/0003-google-connection.md,
+        // section 4). This listener is registered before Vite's own and cuts the query
+        // string off that one address.
+        configure: (proxy) => {
+          proxy.on('error', (_error, request) => {
+            if (request.url?.startsWith('/api/google/callback')) {
+              request.url = request.url.split('?')[0];
+            }
+          });
+        },
       },
     },
   },

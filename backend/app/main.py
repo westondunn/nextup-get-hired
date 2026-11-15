@@ -22,6 +22,8 @@ from app.discovery_api import router as discovery_router
 from app.evidence import router as evidence_router
 from app.follow_up_rules import router as follow_up_router
 from app.google_connection import router as google_connection_router
+from app.google_consent import protect_access_log
+from app.google_consent import router as google_consent_router
 from app.health import probe_health
 from app.job_ratings import router as job_ratings_router
 from app.jobs import router as jobs_router
@@ -65,6 +67,9 @@ app.include_router(correspondence_router)
 app.include_router(seed_router)
 app.include_router(session_router)
 app.include_router(google_connection_router)
+app.include_router(google_consent_router)
+# The consent callback's query string carries an authorization code; keep it out of the log.
+protect_access_log()
 logger = logging.getLogger(__name__)
 Database = Annotated[Session, Depends(get_session)]
 

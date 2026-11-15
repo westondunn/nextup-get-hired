@@ -1,5 +1,6 @@
 """Opt-in tests against the running Compose stack, with real broker delivery."""
 
+import logging
 import os
 import time
 from datetime import UTC, datetime
@@ -10,7 +11,7 @@ import pytest
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app import token_vault
+from app import google_consent, token_vault
 from app.config import get_settings
 from app.db import get_engine
 from app.models import DiagnosticRun, GoogleConnection
@@ -164,6 +165,7 @@ def test_the_running_stack_refuses_to_store_a_google_client():
     with httpx.Client(base_url="http://api:8000", timeout=20) as client:
         assert client.get("/api/google/connection").status_code == 401
         assert client.put("/api/google/client", json=client_body).status_code == 401
+        assert client.post("/api/google/connect", data={"capability": "gmail"}).status_code == 401
         assert client.post("/api/session", json={"code": code}).status_code == 204
         try:
             assert client.get("/api/google/connection").json() == {
@@ -172,11 +174,59 @@ def test_the_running_stack_refuses_to_store_a_google_client():
                 "client_configured": False,
                 "client_id": None,
                 "state": "not_configured",
+                "granted_capabilities": [],
+                "account_address": None,
             }
             refused = client.put("/api/google/client", json=client_body)
             assert refused.status_code == 409
             assert client_body["client_secret"] not in refused.text
+            started = client.post("/api/google/connect", data={"capability": "gmail"})
+            assert started.status_code == 409 and "location" not in started.headers
         finally:
             assert client.delete("/api/session").status_code == 204
     with Session(get_engine()) as session:
         assert session.get(GoogleConnection, 1) is None
+
+
+def test_the_running_server_keeps_the_callback_query_string_out_of_its_log():
+    """The consent callback's query string never reaches the api service's access log.
+
+    The query string here carries the setup code, which the disclosure audit of this run
+    searches for in the logs of every service. If the server logged the callback's request
+    line as it logs others, the audit would find the code and fail the run. The request
+    is refused, as every connection route is in fixture data mode.
+
+    The call is made outside any assertion, and assertions compare status codes and flags
+    only, so a failure never prints the code.
+    """
+    logging.getLogger("httpx").setLevel(logging.WARNING)  # it logs request addresses at INFO
+    code = get_settings().setup_code.get_secret_value()
+    configured = len(code) >= 24
+    assert configured, "the api service must receive the setup code file"
+    with httpx.Client(base_url="http://api:8000", timeout=20) as client:
+        response = client.get("/api/google/callback", params={"state": code, "code": code})
+        status, policy = response.status_code, response.headers.get("referrer-policy")
+        repeated = code in response.text
+        del response
+    assert (status, policy, repeated) == (409, "no-referrer", False)
+    with Session(get_engine()) as session:
+        assert session.get(GoogleConnection, 1) is None
+
+
+def test_a_consent_flow_entry_is_kept_in_the_real_store_for_one_read():
+    """The flow store against the running Redis: one read, and an expiry of ten minutes."""
+    from app.local_session import _redis_client
+
+    state = "synthetic-state-" + "s" * 27
+    entry = {"verifier": "synthetic", "capabilities": ["gmail"], "binding": "synthetic"}
+    store = google_consent.get_flow_store()
+    key = google_consent.FLOW_KEY_PREFIX + google_consent._digest(state)
+    try:
+        store.put(state, entry)
+        assert 0 < _redis_client().ttl(key) <= google_consent.FLOW_SECONDS == 600
+        assert state.encode() not in key.encode()
+        assert store.take(state) == entry
+        assert store.take(state) is None  # deleted as it was read
+        assert _redis_client().exists(key) == 0
+    finally:
+        _redis_client().delete(key)

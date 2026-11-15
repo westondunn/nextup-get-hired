@@ -185,6 +185,8 @@ def test_the_secret_is_sealed_before_it_reaches_the_database(api):
         "client_configured": True,
         "client_id": CLIENT_ID,
         "state": "not_connected",
+        "granted_capabilities": [],
+        "account_address": None,
     }
     # The statement that creates the row carries the sealed value and never the plain one.
     (statement,) = database.execute.call_args.args
@@ -244,6 +246,8 @@ def test_nothing_stored_is_reported_as_not_configured(api):
         "client_configured": False,
         "client_id": None,
         "state": "not_configured",
+        "granted_capabilities": [],
+        "account_address": None,
     }
     current["settings"] = Settings()
     assert client.get("/api/google/connection").json() == {
@@ -252,6 +256,8 @@ def test_nothing_stored_is_reported_as_not_configured(api):
         "client_configured": False,
         "client_id": None,
         "state": "not_configured",
+        "granted_capabilities": [],
+        "account_address": None,
     }
 
 
@@ -283,9 +289,32 @@ def test_the_report_carries_the_state_and_never_a_credential(api):
             "client_configured",
             "client_id",
             "state",
+            "granted_capabilities",
+            "account_address",
         }
         assert row.client_secret_sealed not in response.text and not leaks(response)
         assert row.refresh_token_sealed is None or row.refresh_token_sealed not in response.text
+
+
+def test_the_report_names_what_google_granted_and_the_connected_account(api):
+    client, database, _ = api
+    gmail = "https://www.googleapis.com/auth/gmail.readonly"
+    calendar = "https://www.googleapis.com/auth/calendar.readonly"
+    cases = [
+        ([], []),
+        ([gmail], ["gmail"]),
+        ([calendar], ["calendar"]),
+        ([calendar, gmail, "openid"], ["gmail", "calendar"]),
+        # A wider scope is not the read-only capability, and never counts as it.
+        (["https://www.googleapis.com/auth/gmail.modify"], []),
+    ]
+    for scopes, capabilities in cases:
+        database.get.return_value = connected(
+            granted_scopes=scopes, account_address="person@example.test"
+        )
+        body = client.get("/api/google/connection").json()
+        assert body["granted_capabilities"] == capabilities
+        assert body["account_address"] == "person@example.test"
 
 
 def test_a_record_the_key_cannot_open_is_reported_as_unreadable(api):

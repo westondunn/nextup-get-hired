@@ -12,5 +12,5 @@ test('the /api proxy forwards the browser Host header unchanged', () => {
   expect(typeof options).toBe('object');
   expect(typeof options.target).toBe('string');
   expect(options.changeOrigin).toBe(false);
-  expect(Object.keys(options).sort()).toEqual(['changeOrigin', 'target']);
+  expect(Object.keys(options).sort()).toEqual(['changeOrigin', 'configure', 'target']);
 });
