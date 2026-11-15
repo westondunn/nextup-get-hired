@@ -17,7 +17,14 @@ from pydantic import SecretStr
 from app import job_tasks, jobs
 from app.config import Settings, load_settings
 from app.guard.errors import ConfigError
-from app.sources import adzuna, employer_boards, gmail, google_calendar, greenhouse
+from app.sources import (
+    adzuna,
+    employer_boards,
+    gmail,
+    google_calendar,
+    google_oauth,
+    greenhouse,
+)
 from app.sources.common import SourceError, require_live_requests
 
 PASSWORD = "unit_test_only_password_0123456789"
@@ -73,6 +80,13 @@ PROVIDER_CALLS = {
     "employer-ashby": lambda s, c: employer_boards.fetch_board("ashby", "x", "X", s, client=c),
     "gmail-token": lambda s, c: gmail.refresh_access_token(c, s),
     "calendar-token": lambda s, c: google_calendar.refresh_access_token(c, s),
+    "google-exchange": lambda s, c: google_oauth.exchange_code(
+        c, s, client_id="id", client_secret="secret", code="code", verifier="v", redirect_uri="u"
+    ),
+    "google-account": lambda s, c: google_oauth.account_addresses(
+        c, s, google_oauth.Grant("access", "refresh", frozenset({gmail.SCOPE}))
+    ),
+    "google-revoke": lambda s, c: google_oauth.revoke(c, s, "refresh"),
 }
 
 

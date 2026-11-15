@@ -1,6 +1,6 @@
 # 0003 — Google connection: client registration, flow and token storage
 
-- **Status:** Accepted by the maintainer on 2026-11-14. Nothing described here is implemented.
+- **Status:** Accepted by the maintainer on 2026-11-14. Nothing described here was implemented on that date. Implementation is in progress, and what has merged is recorded in [#10](https://github.com/westondunn/nextup-get-hired/issues/10).
 - **Date:** 2026-11-14, written against commit `c5e1773`.
 - **Tracking:** decision [#9](https://github.com/westondunn/nextup-get-hired/issues/9); implementation [#10](https://github.com/westondunn/nextup-get-hired/issues/10), [#11](https://github.com/westondunn/nextup-get-hired/issues/11), [#12](https://github.com/westondunn/nextup-get-hired/issues/12); validation [#14](https://github.com/westondunn/nextup-get-hired/issues/14); part of [#3](https://github.com/westondunn/nextup-get-hired/issues/3).
 
@@ -174,6 +174,11 @@ Every row leaves the application usable without Google, and none changes an impo
 | The key file is missing or the record cannot be decrypted | The connection is reported as unreadable. Sync does nothing. The rest of the application is unaffected |
 | Two connect flows run at once | Each `state` works once. The flow that completes last is the stored connection |
 | The user connects a different Google account | The earlier grant is revoked first, then replaced. Records imported from the earlier account stay |
+
+**Implementation notes, 2026-11-15 ([#10](https://github.com/westondunn/nextup-get-hired/issues/10)).** Two rows are implemented more narrowly than they are written. Google's revocation ends an account's whole grant to a client, so a revocation at the wrong moment can end a grant NextUp is using.
+
+- **A different account.** The new grant is stored first, and the earlier grant is revoked immediately afterwards. If storing fails, nothing has been revoked and the earlier connection still works. The row lock is not held while Google is contacted. When the same account connects again, nothing is revoked.
+- **None of the capabilities asked for is granted.** Nothing is stored, as written. The returned token is revoked only when NextUp holds no grant: no stored connection and no fallback in configuration. Otherwise it is discarded without revocation, because it may belong to the grant in use.
 
 ## What leaves the machine
 
