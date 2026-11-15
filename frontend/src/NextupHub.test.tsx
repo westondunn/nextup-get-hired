@@ -41,6 +41,22 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.clearAllMocks();
+  window.history.replaceState(null, '', '/');
+});
+
+it('opens Settings when Google sends the browser back, and clears the address bar', () => {
+  window.history.replaceState(null, '', '/?google=declined');
+  render(<NextupHub />);
+  expect(screen.getByRole('heading', { level: 1, name: 'Settings' })).toBeTruthy();
+  expect(screen.getByText('settings page marker')).toBeTruthy();
+  expect(window.location.search).toBe('');
+});
+
+it('ignores a result word it does not know, and still clears the address bar', () => {
+  window.history.replaceState(null, '', '/?google=something-else');
+  render(<NextupHub />);
+  expect(screen.getByText('today page marker')).toBeTruthy();
+  expect(window.location.search).toBe('');
 });
 
 it('opens on Today and navigates to the Search Plan view', async () => {

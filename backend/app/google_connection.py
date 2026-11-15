@@ -108,6 +108,15 @@ def _out(row: GoogleConnection | None, settings: Settings) -> dict:
         "client_configured": row is not None,
         "client_id": row.client_id if row is not None else None,
         "state": _state(row, settings),
+        # What this installation's configuration allows to be connected and used.
+        "enabled_capabilities": [
+            name
+            for name, enabled in (
+                ("gmail", settings.gmail_sync_enabled),
+                ("calendar", settings.calendar_sync_enabled),
+            )
+            if enabled
+        ],
         # What Google granted, whatever was asked for and whatever NextUp is set to use.
         "granted_capabilities": list(capabilities_of(row.granted_scopes or [])) if row else [],
         "account_address": row.account_address if row is not None else None,

@@ -163,6 +163,7 @@ def test_saving_a_client_stores_the_secret_sealed_and_reports_no_secret(
         "client_configured": True,
         "client_id": CLIENT_ID,
         "state": "not_connected",
+        "enabled_capabilities": ["calendar"],
         "granted_capabilities": [],
         "account_address": None,
     }
@@ -342,6 +343,7 @@ def test_the_consent_flow_stores_a_sealed_grant(consent, profile_database):
         "client_configured": True,
         "client_id": CLIENT_ID,
         "state": "connected",
+        "enabled_capabilities": ["gmail", "calendar"],
         "granted_capabilities": ["gmail", "calendar"],
         "account_address": FIRST_ADDRESS,
     }

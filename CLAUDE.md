@@ -94,6 +94,7 @@ The central safety mechanism; most surprising behaviour in this repo traces back
 - No router: `NextupHub.tsx` is the shell and switches between views in `hub/*View.tsx` with a `Page` state value.
 - API access is through per-feature `*-api.ts` modules using plain `fetch` against `/api/...` (Vite proxies `/api` to `API_PROXY_TARGET`). The shared `request` helper is in `jobs-api.ts`.
 - Render stored URLs through `safeHref` in `hub/safe.ts` (http/https only).
+- `hub/GoogleConnectionCard.tsx` saves the Google client and starts the consent flow with a real form post (`method="post"` to `/api/google/connect`), because the API answers with a redirect that the browser must follow. The API ends the flow at `/?google=<word>`; `takeGoogleResult` in `hub/google-api.ts` reads the word once, accepts only the fixed set and removes it from the address bar, and `NextupHub.tsx` opens Settings.
 - Tailwind CSS v4 via the Vite plugin; Prettier for formatting; unit tests are colocated `*.test.ts(x)`, Playwright specs are in `frontend/tests/`.
 
 ### Tooling (`scripts/`)

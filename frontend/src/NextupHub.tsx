@@ -29,6 +29,7 @@ import ContentView from './hub/ContentView';
 import ContactsView from './hub/ContactsView';
 import MetricsView from './hub/MetricsView';
 import DiscoveryView from './hub/DiscoveryView';
+import { takeGoogleResult } from './hub/google-api';
 import SettingsView from './hub/SettingsView';
 
 type Page =
@@ -65,7 +66,10 @@ const NAV_ITEMS: { label: string; icon: typeof LayoutDashboard; page: Page }[] =
 ];
 
 export default function NextupHub() {
-  const [page, setPage] = useState<Page>('today');
+  // A Google consent flow ends with a redirect to `/?google=<word>`. The word is read once,
+  // removed from the address bar, and shown in Settings.
+  const [googleResult] = useState(takeGoogleResult);
+  const [page, setPage] = useState<Page>(googleResult ? 'settings' : 'today');
   const [unread, setUnread] = useState(0);
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
@@ -238,7 +242,7 @@ export default function NextupHub() {
             {page === 'metrics' && <MetricsView />}
             {page === 'messages' && <AlertsView />}
             {page === 'discovery' && <DiscoveryView onViewJobs={() => navigate('jobs')} />}
-            {page === 'settings' && <SettingsView />}
+            {page === 'settings' && <SettingsView googleResult={googleResult} />}
           </section>
         </div>
       </main>
