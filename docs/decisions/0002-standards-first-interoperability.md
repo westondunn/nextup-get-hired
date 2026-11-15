@@ -69,7 +69,7 @@ These are how NextUp will describe things. They are not commitments to build eve
 | --- | --- |
 | The contract every read-only correspondence adapter must meet | [#24](https://github.com/westondunn/nextup-get-hired/issues/24) |
 | Whether to build a second email adapter, and which | [#25](https://github.com/westondunn/nextup-get-hired/issues/25) |
-| The flow and token storage for the Google connection | Proposed in [decision 0003](0003-google-connection.md) ([#9](https://github.com/westondunn/nextup-get-hired/issues/9)). Registration ownership was decided on 2026-11-14: user-owned |
+| The flow and token storage for the Google connection | Decided in [decision 0003](0003-google-connection.md), accepted on 2026-11-14 ([#9](https://github.com/westondunn/nextup-get-hired/issues/9)). Registration ownership was decided on 2026-11-14: user-owned |
 | Registration ownership for providers other than Google | Not tracked; decided per provider when one is proposed |
 | The first AI task, its contract, and the first API compatibility target | [#26](https://github.com/westondunn/nextup-get-hired/issues/26) |
 | Evidence required for each support status, and how often it is re-validated | [#27](https://github.com/westondunn/nextup-get-hired/issues/27) |

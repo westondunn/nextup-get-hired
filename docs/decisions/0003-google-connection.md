@@ -1,6 +1,6 @@
 # 0003 — Google connection: client registration, flow and token storage
 
-- **Status:** Proposed. The four choices in "Decided by the maintainer" were made on 2026-11-14. Everything else is a proposal until the questions at the end are answered. Nothing described here is implemented.
+- **Status:** Accepted by the maintainer on 2026-11-14. Nothing described here is implemented.
 - **Date:** 2026-11-14, written against commit `c5e1773`.
 - **Tracking:** decision [#9](https://github.com/westondunn/nextup-get-hired/issues/9); implementation [#10](https://github.com/westondunn/nextup-get-hired/issues/10), [#11](https://github.com/westondunn/nextup-get-hired/issues/11), [#12](https://github.com/westondunn/nextup-get-hired/issues/12); validation [#14](https://github.com/westondunn/nextup-get-hired/issues/14); part of [#3](https://github.com/westondunn/nextup-get-hired/issues/3).
 
@@ -212,17 +212,17 @@ Nothing is sent to the NextUp project or to any other party. Data flows from Goo
 
 The all-day event work ([#38](https://github.com/westondunn/nextup-get-hired/issues/38)) also adds a migration. Whichever lands first is the first revision after the pinned history.
 
-## Questions for acceptance
+## Decisions on the questions raised in review
 
-These are proposals. Each has a recommendation; none is decided.
+The maintainer accepted the recommended answer to each on 2026-11-14.
 
-| Question | Recommendation |
+| Question | Decision |
 | --- | --- |
-| A partial grant. [#10](https://github.com/westondunn/nextup-get-hired/issues/10) currently says partial consent leaves no stored token | Store it and offer only what was granted, as section 5 describes. Google's guidance and the rule that one capability is never inferred from another both point this way. #10's criterion would be updated |
-| The callback is exempt from the session cookie | Accept, with the `state` and binding-cookie checks in section 4. Decision 0001 gets a note pointing here |
-| Status and test routes require the session | Yes, like the other connection routes. The status includes the account address |
-| The guide's stance on the consent-screen audience | Describe all three; do not present "Testing" as the normal choice |
-| The key is mounted into `api` and `worker` only, with no rotation in the first version | Accept |
+| A partial grant | It is stored, and only the capabilities actually granted are offered, as section 5 describes. The earlier criterion in [#10](https://github.com/westondunn/nextup-get-hired/issues/10), that partial consent stores nothing, was replaced on the same day |
+| The callback and the session cookie | The callback is exempt from the session cookie and is protected by the `state` and binding-cookie checks in section 4. Decision 0001 records the exception |
+| Status and test routes | They require the session, like the other connection routes |
+| The guide's stance on the consent-screen audience | It describes all three settings and does not present "Testing" as the normal choice |
+| The encryption key | It is mounted into `api` and `worker` only. There is no rotation in the first version |
 
 ## Not verified
 
