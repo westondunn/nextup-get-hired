@@ -182,28 +182,131 @@ def test_an_all_day_event_keeps_its_calendar_date(day):
     assert event.ends_at - event.starts_at == timedelta(days=1)
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="The adapter ignores start.timeZone and reads an offset-less dateTime as UTC. "
-    "Defect: https://github.com/westondunn/nextup-get-hired/issues/39",
-)
+def zoned(event_id, local, zone, end=None):
+    """An event whose times carry no offset and name their zone, as the API allows."""
+    payload = timed(event_id, local)
+    payload["start"] = {"dateTime": local, "timeZone": zone}
+    payload["end"] = {"dateTime": end or local, "timeZone": zone}
+    return payload
+
+
 @pytest.mark.parametrize(
     ("local", "instant"),
     [
         pytest.param("2027-03-14T01:30:00", utc(2027, 3, 14, 7, 30), id="spring-before"),
         pytest.param("2027-03-14T03:30:00", utc(2027, 3, 14, 8, 30), id="spring-after"),
+        pytest.param("2026-11-01T00:30:00", utc(2026, 11, 1, 5, 30), id="autumn-before"),
         pytest.param("2026-11-01T02:30:00", utc(2026, 11, 1, 8, 30), id="autumn-after"),
+        pytest.param("2027-01-15T09:00:00", utc(2027, 1, 15, 15), id="winter"),
+        pytest.param("2027-07-15T09:00:00", utc(2027, 7, 15, 14), id="summer"),
     ],
 )
 def test_a_time_without_an_offset_is_read_in_the_named_zone(local, instant):
-    # The Calendar API allows dateTime to omit the offset when timeZone is given.
-    payload = timed("e", local)
-    payload["start"] = {"dateTime": local, "timeZone": "America/Chicago"}
-    assert cal.parse_event(payload).starts_at == instant
+    event = cal.parse_event(zoned("e", local, "America/Chicago"))
+    assert event.starts_at == instant and event.ends_at == instant
+    assert event.starts_at.utcoffset() == timedelta(0) and not event.all_day
+
+
+def test_a_time_without_an_offset_in_the_skipped_or_repeated_hour_follows_the_calendar_standard():
+    # RFC 5545, section 3.3.5: a time that does not occur is read with the offset from before
+    # the gap, and a time that occurs twice is the first occurrence.
+    skipped = cal.parse_event(zoned("e", "2027-03-14T02:30:00", "America/Chicago"))
+    assert skipped.starts_at == utc(2027, 3, 14, 8, 30)
+    assert skipped.starts_at.astimezone(CHICAGO).isoformat() == "2027-03-14T03:30:00-05:00"
+    repeated = cal.parse_event(zoned("e", "2026-11-01T01:30:00", "America/Chicago"))
+    assert repeated.starts_at == utc(2026, 11, 1, 6, 30)
+    assert repeated.starts_at.astimezone(CHICAGO).isoformat() == "2026-11-01T01:30:00-05:00"
+
+
+def test_an_event_without_offsets_spanning_a_transition_keeps_its_real_length():
+    spring = cal.parse_event(
+        zoned("e", "2027-03-14T01:30:00", "America/Chicago", end="2027-03-14T03:30:00")
+    )
+    assert spring.ends_at - spring.starts_at == timedelta(hours=1)
+    autumn = cal.parse_event(
+        zoned("e", "2026-11-01T00:30:00", "America/Chicago", end="2026-11-01T02:30:00")
+    )
+    assert autumn.ends_at - autumn.starts_at == timedelta(hours=3)
+
+
+@pytest.mark.parametrize("zone", ["UTC", "Etc/UTC", "Europe/Berlin", "US/Central"])
+def test_other_known_zones_are_read_the_same_way(zone):
+    event = cal.parse_event(zoned("e", "2027-03-14T12:00:00", zone))
+    assert event.starts_at == datetime(2027, 3, 14, 12, tzinfo=ZoneInfo(zone)).astimezone(UTC)
+
+
+@pytest.mark.parametrize(
+    "stamp", ["2027-03-14T03:30:00-05:00", "2027-03-14T08:30:00Z", "2027-03-14T08:30:00+00:00"]
+)
+def test_an_offset_in_the_time_wins_over_the_named_zone(stamp):
+    payload = timed("e", stamp)
+    payload["start"] = {"dateTime": stamp, "timeZone": "Europe/Berlin"}
+    assert cal.parse_event(payload).starts_at == utc(2027, 3, 14, 8, 30)
 
 
 def test_a_time_without_an_offset_or_zone_is_read_as_utc():
     assert cal.parse_event(timed("e", "2027-03-14T02:30:00")).starts_at == utc(2027, 3, 14, 2, 30)
+    for absent in (None, ""):
+        payload = timed("e", "2027-03-14T02:30:00")
+        payload["start"] = {"dateTime": "2027-03-14T02:30:00", "timeZone": absent}
+        assert cal.parse_event(payload).starts_at == utc(2027, 3, 14, 2, 30)
+
+
+# The zone name is provider input. None of these may raise, be looked up as a path, or select
+# the host's own zone; the event is treated like any other with an unreadable start.
+NOT_A_ZONE = [
+    "Nowhere/Missing",
+    "America",
+    "america/chicago",
+    " America/Chicago",
+    "America/Chicago\x00",
+    "../../etc/passwd",
+    "/etc/passwd",
+    "localtime",
+    "Factory",
+    "posixrules",
+    "A" * 5000,
+    5,
+    ["America/Chicago"],
+    {"zone": "America/Chicago"},
+]
+
+
+@pytest.mark.parametrize("zone", NOT_A_ZONE, ids=lambda zone: repr(zone)[:24])
+def test_an_unknown_zone_name_leaves_the_event_out_without_raising(zone):
+    assert cal.parse_event(zoned("e", "2027-03-14T03:30:00", zone)) is None
+    # A readable start with an unreadable end keeps the event and drops only the end.
+    payload = zoned("e", "2027-03-14T03:30:00", "America/Chicago")
+    payload["end"]["timeZone"] = zone
+    event = cal.parse_event(payload)
+    assert event.starts_at == utc(2027, 3, 14, 8, 30) and event.ends_at is None
+
+
+def test_one_event_with_an_unknown_zone_does_not_stop_the_import():
+    items = [
+        zoned("bad", "2027-03-14T03:30:00", "Nowhere/Missing"),
+        zoned("good", "2027-03-14T03:30:00", "America/Chicago", end="2027-03-14T04:00:00"),
+        timed("offset", "2027-03-14T04:30:00-05:00"),
+    ]
+    result, session, _ = run_sync(items, utc(2027, 3, 13, 12))
+    assert result == {"status": "ok", "imported": 2, "updated": 0}
+    rows = {row.source_id: row for row in session.added}
+    assert set(rows) == {"good", "offset"}
+    assert rows["good"].received_at == utc(2027, 3, 14, 8, 30)
+    assert rows["good"].body.splitlines()[0] == (
+        "When: 2027-03-14T08:30:00+00:00 to 2027-03-14T09:00:00+00:00"
+    )
+
+
+def test_the_same_event_with_and_without_an_offset_is_one_unchanged_row():
+    now = utc(2027, 3, 13, 12)
+    with_offset = [timed("e", "2027-03-14T03:30:00-05:00", "2027-03-14T04:00:00-05:00")]
+    result, session, _ = run_sync(with_offset, now)
+    stored = list(session.added)
+    without = [zoned("e", "2027-03-14T03:30:00", "America/Chicago", end="2027-03-14T04:00:00")]
+    result, session, _ = run_sync(without, now, existing=stored)
+    assert result == {"status": "ok", "imported": 0, "updated": 0}
+    assert session.added == []
 
 
 @pytest.mark.parametrize(

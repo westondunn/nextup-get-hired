@@ -5,7 +5,9 @@ events. Network access is explicit and bounded so tests can inject a mocked clie
 """
 
 from dataclasses import dataclass, field
-from datetime import UTC, date, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta, tzinfo
+from functools import lru_cache
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError, available_timezones
 
 import httpx
 
@@ -85,6 +87,31 @@ def list_events(
     return [item for item in items if isinstance(item, dict)]
 
 
+# Names the zone database lists that are not real places: the host's own zone and a placeholder.
+_NOT_EVENT_ZONES = frozenset({"localtime", "Factory"})
+
+
+@lru_cache(maxsize=1)
+def _known_zones() -> frozenset[str]:
+    return frozenset(available_timezones()) - _NOT_EVENT_ZONES
+
+
+def _event_zone(name: object) -> tzinfo | None:
+    """The zone an offset-less event time is written in, or None if it names no known zone.
+
+    The name comes from the provider and is untrusted, so it is looked up only when the zone
+    database lists it. No name at all keeps the earlier reading of such a time as UTC.
+    """
+    if name is None or name == "":
+        return UTC
+    if not isinstance(name, str) or name not in _known_zones():
+        return None
+    try:
+        return ZoneInfo(name)
+    except (ZoneInfoNotFoundError, ValueError, OSError):
+        return None
+
+
 def _when(value: dict | None) -> tuple[datetime | None, bool]:
     if not isinstance(value, dict):
         return None, False
@@ -95,7 +122,13 @@ def _when(value: dict | None) -> tuple[datetime | None, bool]:
         except ValueError:
             return None, False
         if parsed.tzinfo is None:
-            parsed = parsed.replace(tzinfo=UTC)
+            # The API allows a time with no offset when it names a zone. A wall-clock time that
+            # happens twice is the first one, and one that is skipped is read with the offset
+            # from before the gap (RFC 5545, section 3.3.5); that is what fold=0 gives.
+            zone = _event_zone(value.get("timeZone"))
+            if zone is None:
+                return None, False
+            parsed = parsed.replace(tzinfo=zone, fold=0)
         return parsed.astimezone(UTC), False
     day = value.get("date")
     if isinstance(day, str) and day:
