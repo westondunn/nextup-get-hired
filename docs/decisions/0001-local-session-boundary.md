@@ -1,6 +1,6 @@
 # 0001 — Local request boundary for the API
 
-- **Status:** Accepted by the maintainer on 2026-11-13. Nothing described here is implemented yet.
+- **Status:** Accepted by the maintainer on 2026-11-13. The three layers have since been implemented; the evidence is in the [roadmap](../ROADMAP.md).
 - **Date:** 2026-11-13, written against commit `3d02615`.
 - **Tracking:** decision [#7](https://github.com/westondunn/nextup-get-hired/issues/7); implementation [#8](https://github.com/westondunn/nextup-get-hired/issues/8) (layers 1 and 2) and [#18](https://github.com/westondunn/nextup-get-hired/issues/18) (layer 3); part of [#3](https://github.com/westondunn/nextup-get-hired/issues/3).
 
@@ -77,7 +77,7 @@ Routes in scope when layer 3 first ships:
 - `PUT /api/correspondence` and `POST /api/correspondence/sync`, which switch sync on and trigger it;
 - every route added for the Google connection ([#10](https://github.com/westondunn/nextup-get-hired/issues/10), [#11](https://github.com/westondunn/nextup-get-hired/issues/11)).
 
-**Proposed amendment, 2026-11-14.** [Decision 0003](0003-google-connection.md) proposes one exception: the address Google redirects back to cannot require the session cookie, because a `SameSite=Strict` cookie is not sent on a navigation from another site. That record describes the checks that replace it. The exception takes effect only if decision 0003 is accepted.
+**Amendment, 2026-11-14.** [Decision 0003](0003-google-connection.md), accepted by the maintainer on that date, makes one exception: the address Google redirects back to cannot require the session cookie, because a `SameSite=Strict` cookie is not sent on a navigation from another site. That record describes the checks that replace it. Every other Google connection route requires the session.
 
 The rest of the application stays usable without a session, so the default installation needs no extra step.
 

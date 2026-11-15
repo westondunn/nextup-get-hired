@@ -2,7 +2,7 @@
 
 These are the gates that must be met before NextUp, or any of its integrations, is described as publicly supported. A gate is checked only when the evidence is linked next to it. A merged pull request or a closed issue is not evidence on its own.
 
-**Snapshot date: 2026-11-14, last reconciled at commit `be66581`.** Four gates are met; the rest are open. A gate that states a target is met by a recorded result, never by the target being written down. The ordered work is in the [roadmap](ROADMAP.md); scope and acceptance criteria are in the linked issues.
+**Snapshot date: 2026-11-14, last reconciled at commit `91aa6c7`.** Five gates are met; the rest are open. A gate that states a target is met by a recorded result, never by the target being written down. The ordered work is in the [roadmap](ROADMAP.md); scope and acceptance criteria are in the linked issues.
 
 ## Core application
 
@@ -31,7 +31,7 @@ These apply to each integration a release lets users enable. The Google gates be
 
 ## Google connection
 
-- [ ] The OAuth client type, redirect URI, scopes and consent constraints are documented from current official Google documentation ([#9](https://github.com/westondunn/nextup-get-hired/issues/9)). Evidence: pending.
+- [x] The OAuth client type, redirect URI, scopes and consent constraints are documented from current official Google documentation ([#9](https://github.com/westondunn/nextup-get-hired/issues/9)). Evidence: [decision 0003](decisions/0003-google-connection.md), merged in [#46](https://github.com/westondunn/nextup-get-hired/pull/46) as `91aa6c7` and accepted on 2026-11-14, with sources read on that date. Google changes its documentation, so the sources must be re-read at the release commit.
 - [ ] Connect, status, test, reauthorize and disconnect with revocation are implemented and tested with mocked provider calls ([#10](https://github.com/westondunn/nextup-get-hired/issues/10), [#11](https://github.com/westondunn/nextup-get-hired/issues/11)). Evidence: pending.
 - [ ] Tokens are stored server-side, encrypted at rest, and never returned to the browser or written to logs ([#10](https://github.com/westondunn/nextup-get-hired/issues/10)). Evidence: pending.
 - [ ] Only read-only Gmail and Calendar scopes are requested. Evidence: pending.

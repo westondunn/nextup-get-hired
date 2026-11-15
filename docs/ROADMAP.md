@@ -2,7 +2,7 @@
 
 This page lists the planned outcomes. P0 and P1 are in order; the section added after them is not yet placed. It is public planning for a pre-release project. Outside contributions are not being accepted yet (see [CONTRIBUTING.md](../CONTRIBUTING.md)), so nothing here is an invitation to start work.
 
-**Snapshot date: 2026-11-14, last reconciled at commit `be66581`.** Status, scope and acceptance criteria live in the linked issues; where this page and an issue disagree, the issue is right. The parent tracking issue is [#3](https://github.com/westondunn/nextup-get-hired/issues/3). There is no GitHub Project for this repository.
+**Snapshot date: 2026-11-14, last reconciled at commit `91aa6c7`.** Status, scope and acceptance criteria live in the linked issues; where this page and an issue disagree, the issue is right. The parent tracking issue is [#3](https://github.com/westondunn/nextup-get-hired/issues/3). There is no GitHub Project for this repository.
 
 An outcome is checked only when its completion gate is met and the evidence is linked. A branch, an open pull request or a closed issue does not check it. Readiness gates for a public release are in the [release checklist](RELEASE_CHECKLIST.md).
 
@@ -76,14 +76,14 @@ Branch names below are suggestions that follow the [branching guide](BRANCHING.m
 
 This remains the first connection to be completed and validated. It is not supported yet. The interoperability direction does not replace or restart it.
 
-- [ ] **Outcome: the Google OAuth client registration, flow and token storage are decided**
+- [x] **Outcome: the Google OAuth client registration, flow and token storage are decided**
   - Tracking: [#9](https://github.com/westondunn/nextup-get-hired/issues/9)
   - Priority and dependencies: P1; blocked by [#7](https://github.com/westondunn/nextup-get-hired/issues/7)
-  - Suggested branch: `docs/9-google-oauth-adr`
-  - Contributor notes: decision record under `docs/decisions/`; must cite current official Google documentation; the registration is user-owned (decided by the maintainer on 2026-11-14); the record is proposed in [decision 0003](decisions/0003-google-connection.md)
+  - Suggested branch: `docs/9-google-oauth-adr` (used as suggested)
+  - Contributor notes: decision record under `docs/decisions/`; must cite current official Google documentation; the registration is user-owned, the client type is Web application, client credentials are entered in Settings, and the configuration refresh token stays as a fallback
   - Contribution availability: maintainer-only
   - Complete when: the decision record is reviewed and merged
-  - Evidence: pending
+  - Evidence: [decisions/0003-google-connection.md](decisions/0003-google-connection.md), merged in [#46](https://github.com/westondunn/nextup-get-hired/pull/46) as `91aa6c7` and accepted by the maintainer on 2026-11-14; [hosted CI run on `main`](https://github.com/westondunn/nextup-get-hired/actions/runs/43668150428). Written from Google's documentation as read on that date; no live account was used, and the record lists what that leaves unverified
 
 - [ ] **Outcome: a user can connect a Google account through the browser for read-only Gmail and Calendar**
   - Tracking: [#10](https://github.com/westondunn/nextup-get-hired/issues/10)
