@@ -20,11 +20,13 @@ import integration_db
 import pytest
 from alembic.config import Config
 from alembic.script import ScriptDirectory
+from pydantic import SecretStr
 from sqlalchemy import text
 from sqlalchemy.engine import make_url
 from sqlalchemy.exc import IntegrityError
 
-from app import guard
+from app import guard, token_vault
+from app.config import Settings
 from app.guard.errors import GuardRefused
 
 pytestmark = pytest.mark.skipif(
@@ -32,7 +34,7 @@ pytestmark = pytest.mark.skipif(
 )
 PAIRS = [(f"{n:04d}", f"{n - 1:04d}" if n > 1 else "base") for n in range(1, 30)]
 # Revisions added after the pinned history are named oss_NNNN and continue the same chain.
-PAIRS += [("oss_0030", "0029")]
+PAIRS += [("oss_0030", "0029"), ("oss_0031", "oss_0030")]
 HEAD = PAIRS[-1][0]
 # Downgrade to base is not authorizable; 0001 is covered by INIT and the head <-> 0001 chain.
 ROUND_TRIPS = PAIRS[1:]
@@ -112,6 +114,11 @@ TABLES = {
         21,
         "id enabled query max_messages_per_run cursor_epoch last_run_at "
         "last_status last_error last_imported updated_at",
+    ),
+    "google_connections": (
+        31,
+        "id client_id client_secret_sealed refresh_token_sealed key_version state "
+        "granted_scopes account_address connected_at created_at updated_at",
     ),
 }
 ADDED = {
@@ -833,3 +840,60 @@ def test_all_day_flag_keeps_imported_events_through_upgrade_and_downgrade(migrat
     assert events() == before
     cli(engine, "upgrade", "oss_0030")
     assert [row["all_day"] for row in events()] == [False]
+
+
+def test_google_connection_holds_one_row_of_sealed_values_only(migration_database):
+    engine = migration_database
+    # Sealed by the real vault with a key that exists only in this test.
+    key = Settings(token_key=SecretStr("migration-test-only-token-key-0123456789abcdef"))
+    secret = token_vault.seal("synthetic-client-secret", purpose="test.secret", settings=key)
+    token = token_vault.seal("synthetic-refresh-token", purpose="test.token", settings=key)
+
+    def connection():
+        return snapshot(engine)["rows"]["google_connections"]
+
+    def refused(statement, **parameters):
+        with pytest.raises(IntegrityError):
+            execute(engine, statement, **parameters)
+
+    insert = (
+        "INSERT INTO google_connections (id,client_id,client_secret_sealed) "
+        "VALUES (:id,:client,:secret)"
+    )
+    cli(engine, "upgrade", "head")
+    # A value that is not sealed is refused before anything is stored.
+    refused(insert, id=1, client="synthetic-client", secret="synthetic-client-secret")
+    refused(insert, id=1, client="", secret=secret)
+    assert connection() == []
+
+    execute(engine, insert, id=1, client="synthetic-client", secret=secret)
+    (row,) = connection()
+    assert (row["state"], row["key_version"], row["granted_scopes"]) == ("not_connected", 1, [])
+    assert row["refresh_token_sealed"] is None and row["account_address"] is None
+    assert row["connected_at"] is None
+    # There is one connection.
+    refused(insert, id=2, client="synthetic-client", secret=secret)
+
+    # A grant and its refresh token are stored together or not at all.
+    update = "UPDATE google_connections SET state = :state, refresh_token_sealed = :token"
+    refused(update, state="connected", token=None)
+    refused(update, state="needs_reauthorization", token=None)
+    refused(update, state="not_connected", token=token)
+    refused(update, state="connected", token="synthetic-refresh-token")
+    refused(update, state="paused", token=token)
+    refused("UPDATE google_connections SET key_version = 0")
+    refused("UPDATE google_connections SET client_secret_sealed = 'synthetic-client-secret'")
+    assert connection() == [row]
+    for state in ("connected", "needs_reauthorization"):
+        execute(engine, update, state=state, token=token)
+        assert [(r["state"], r["refresh_token_sealed"]) for r in connection()] == [(state, token)]
+
+    # The downgrade refuses while the row exists and changes nothing.
+    before = snapshot(engine)
+    cli(engine, "downgrade", "oss_0030", expected_error="A stored Google connection exists")
+    assert snapshot(engine) == before
+    execute(engine, "DELETE FROM google_connections")
+    cli(engine, "downgrade", "oss_0030")
+    assert_revision(engine, "oss_0030")
+    cli(engine, "upgrade", "oss_0031")
+    assert connection() == []

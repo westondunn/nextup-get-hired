@@ -42,6 +42,7 @@ TABLES = (
     "companies",
     "job_ratings",
     "email_classifications",
+    "google_connections",
 )
 # Tables the rehearsal writes to itself; these must carry rows to count as exercised.
 EXERCISED = TABLES[:13]
