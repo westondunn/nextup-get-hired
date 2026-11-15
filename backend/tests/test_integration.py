@@ -10,6 +10,7 @@ import pytest
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app import token_vault
 from app.config import get_settings
 from app.db import get_engine
 from app.models import DiagnosticRun
@@ -104,3 +105,15 @@ def test_local_session_round_trip_against_the_real_store():
         assert client.delete("/api/session").status_code == 204
         assert client.get("/api/session").json()["active"] is False
         assert client.put("/api/correspondence", json=invalid).status_code == 401
+
+
+def test_the_api_container_can_encrypt_with_the_mounted_token_key():
+    """The key file reaches this service, and a value sealed with it opens again.
+
+    Assertions compare lengths and flags only, so a failure never prints the key.
+    """
+    assert len(get_settings().token_key.get_secret_value()) >= token_vault.MIN_KEY_LENGTH
+    assert token_vault.available()
+    sealed = token_vault.seal("synthetic value", purpose="integration-test")
+    assert sealed.startswith("v1.") and "synthetic value" not in sealed
+    assert token_vault.open_sealed(sealed, purpose="integration-test") == "synthetic value"

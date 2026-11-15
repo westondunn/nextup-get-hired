@@ -126,12 +126,21 @@ def rendered_dev(root="/x", instance=INSTANCE, user="1000:1000"):
         },
         "api": {
             **runtime,
-            "environment": {**runtime_env, "NEXTUP_SETUP_CODE_FILE": "/run/secrets/setup_code"},
-            "secrets": secrets("db_app_password", "setup_code"),
+            "environment": {
+                **runtime_env,
+                "NEXTUP_SETUP_CODE_FILE": "/run/secrets/setup_code",
+                "NEXTUP_TOKEN_KEY_FILE": "/run/secrets/token_key",
+            },
+            "secrets": secrets("db_app_password", "setup_code", "token_key"),
             "ports": port(18000, 8000),
             "depends_on": {"postgres": {}, "redis": {}},
         },
-        "worker": {**runtime, "command": ["celery", "worker"]},
+        "worker": {
+            **runtime,
+            "environment": {**runtime_env, "NEXTUP_TOKEN_KEY_FILE": "/run/secrets/token_key"},
+            "secrets": secrets("db_app_password", "token_key"),
+            "command": ["celery", "worker"],
+        },
         "scheduler": {
             **runtime,
             "command": ["celery", "beat"],
@@ -201,6 +210,54 @@ class RenderedShape(unittest.TestCase):
             with self.assertRaises(oss_env.IsolationError) as caught:
                 oss_env.validate_config(value, dev)
             self.assertNotIn(SENTINEL, str(caught.exception))
+
+    def test_token_key_reaches_the_api_and_the_worker_only(self):
+        """The key for stored connection credentials: api stores, worker reads during sync."""
+        dev = oss_env.ENVIRONMENTS["dev"]
+        for service in ("scheduler", "migrate"):
+            for mutate in (
+                lambda c, s=service: c["services"][s]["secrets"].append(
+                    {"source": "token_key", "target": "/run/secrets/token_key"}
+                ),
+                lambda c, s=service: c["services"][s]["environment"].update(
+                    NEXTUP_TOKEN_KEY_FILE="/run/secrets/token_key"
+                ),
+            ):
+                value = rendered_dev()
+                mutate(value)
+                with self.subTest(service=service), self.assertRaises(oss_env.IsolationError):
+                    oss_env.validate_config(value, dev)
+        for service in ("api", "worker"):
+            for mutate in (
+                lambda c, s=service: c["services"][s]["environment"].pop("NEXTUP_TOKEN_KEY_FILE"),
+                lambda c, s=service: c["services"][s]["environment"].update(
+                    NEXTUP_TOKEN_KEY_FILE="/run/secrets/db_app_password"
+                ),
+                lambda c, s=service: c["services"][s]["environment"].update(
+                    NEXTUP_TOKEN_KEY=SENTINEL
+                ),
+                lambda c, s=service: c["services"][s]["secrets"].pop(),
+                lambda c: c["secrets"].pop("token_key"),
+            ):
+                value = rendered_dev()
+                mutate(value)
+                with (
+                    self.subTest(service=service),
+                    self.assertRaises(oss_env.IsolationError) as caught,
+                ):
+                    oss_env.validate_config(value, dev)
+                self.assertNotIn(SENTINEL, str(caught.exception))
+
+    def test_staging_has_no_token_key(self):
+        """Staging refuses integrations and their credentials, so it has no key for them."""
+        staging = oss_env.ENVIRONMENTS["staging"]
+        self.assertNotIn("token_key", oss_env.secret_names(staging))
+        self.assertEqual(oss_env.service_secrets(staging, "worker"), {"db_app_password"})
+        self.assertEqual(oss_env.service_secrets(staging, "api"), {"db_app_password", "setup_code"})
+        dev = oss_env.ENVIRONMENTS["dev"]
+        self.assertIn("token_key", oss_env.secret_names(dev))
+        self.assertEqual(oss_env.service_secrets(dev, "worker"), {"db_app_password", "token_key"})
+        self.assertEqual(oss_env.service_secrets(dev, "scheduler"), {"db_app_password"})
 
     def test_validation_errors_never_echo_values(self):
         for mutate in (

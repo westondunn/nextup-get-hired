@@ -135,11 +135,15 @@ IDENTITY_KEYS = frozenset(
 # inline name is not on the allowlist, so it is refused like any unknown key. It is not an
 # integration credential and is deliberately outside SECRET_FIELDS.
 SETUP_CODE_VARIABLE = "NEXTUP_SETUP_CODE"
+# Key that encrypts the credentials of a stored connection
+# (docs/decisions/0003-google-connection.md). File only, like the setup code. Staging
+# refuses integrations and their credentials, so it refuses this key too.
+TOKEN_KEY_VARIABLE = "NEXTUP_TOKEN_KEY"
 FEATURE_KEYS = frozenset(
     {env_name(n) for n in PLAIN_FIELDS}
     | {env_name(n) for n in SECRET_FIELDS}
     | {env_name(n) + "_FILE" for n in SECRET_FIELDS}
-    | {SETUP_CODE_VARIABLE + "_FILE"}
+    | {SETUP_CODE_VARIABLE + "_FILE", TOKEN_KEY_VARIABLE + "_FILE"}
 )
 # Test-harness variables share the namespace; they are accepted only in ci and test.
 HARNESS_KEYS = frozenset(
@@ -175,6 +179,7 @@ class Settings(BaseModel):
     redis_url: str = REDIS_URL
     # Empty when no setup code file is mounted; local sessions then cannot be started.
     setup_code: SecretStr = SecretStr("")
+    token_key: SecretStr = SecretStr("")
     diagnostic_interval_seconds: int = Field(default=60, ge=10, le=3600)
     live_job_fetch_enabled: bool = False
     # Fixture data mode (ci/test only): every job source serves the bundled synthetic
@@ -441,6 +446,9 @@ def _feature_values(environ, env) -> dict:
     setup_code = _secret(environ, SETUP_CODE_VARIABLE, env=env, allow_inline=False)
     if setup_code is not None:
         values["setup_code"] = setup_code
+    token_key = _secret(environ, TOKEN_KEY_VARIABLE, env=env, allow_inline=False)
+    if token_key is not None:
+        values["token_key"] = token_key
     redis = environ.get("NEXTUP_REDIS_URL")
     if redis is not None:
         if redis != REDIS_URL:
@@ -466,10 +474,11 @@ def _check_integrations(settings: Settings, env: str) -> None:
         if getattr(settings, n)
     ]
     if env == "staging":
-        if flags_on or present(SECRET_FIELDS) or settings.greenhouse_board_token:
+        token_key = [TOKEN_KEY_VARIABLE + "_FILE"] if settings.token_key.get_secret_value() else []
+        if flags_on or present(SECRET_FIELDS) or settings.greenhouse_board_token or token_key:
             raise ConfigError(
                 "NXG-C09",
-                keys=tuple(env_name(n) for n in flags_on + present(SECRET_FIELDS)),
+                keys=tuple([env_name(n) for n in flags_on + present(SECRET_FIELDS)] + token_key),
                 env=env,
             )
         return

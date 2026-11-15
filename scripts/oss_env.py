@@ -108,21 +108,44 @@ BACKEND_SERVICES = RUNTIME_SERVICES + ("migrate",)
 # Secrets: Compose `secrets:` read from files; containers see /run/secrets/<name> only.
 # `setup_code` is the local-session setup code (docs/decisions/0001-local-session-boundary.md).
 # Only the api verifies it, so only the api receives it.
+# `token_key` encrypts the credentials of a stored connection
+# (docs/decisions/0003-google-connection.md). The api stores them and the worker reads them
+# during sync, so those two services receive it and no other does. Staging refuses
+# integrations and their credentials, so staging has no token key at all.
 SECRET_NAMES = (
     "db_admin_password",
     "db_owner_password",
     "db_app_password",
     "migration_key",
     "setup_code",
+    "token_key",
 )
 SETUP_CODE_SERVICE = "api"
 SETUP_CODE_VARIABLE = "NEXTUP_SETUP_CODE_FILE"
+TOKEN_KEY_SERVICES = ("api", "worker")
+TOKEN_KEY_VARIABLE = "NEXTUP_TOKEN_KEY_FILE"
+ENVIRONMENTS_WITHOUT_TOKEN_KEY = ("staging",)
 SERVICE_SECRETS = {
     "postgres": {"db_admin_password", "db_owner_password", "db_app_password"},
     "migrate": {"db_owner_password", "migration_key"},
-    **{name: {"db_app_password"} for name in RUNTIME_SERVICES},
-    SETUP_CODE_SERVICE: {"db_app_password", "setup_code"},
+    "scheduler": {"db_app_password"},
+    "worker": {"db_app_password", "token_key"},
+    "api": {"db_app_password", "setup_code", "token_key"},
 }
+
+
+def secret_names(env) -> tuple[str, ...]:
+    """The secret files an environment has."""
+    if env.name in ENVIRONMENTS_WITHOUT_TOKEN_KEY:
+        return tuple(name for name in SECRET_NAMES if name != "token_key")
+    return SECRET_NAMES
+
+
+def service_secrets(env, service: str) -> set[str]:
+    """The secrets one service receives in an environment."""
+    return set(SERVICE_SECRETS.get(service, set())) & set(secret_names(env))
+
+
 INIT_SCRIPT_DIR = "backend/docker/initdb"
 INIT_MOUNT_TARGET = "/docker-entrypoint-initdb.d"
 GUARD_ENTRYPOINT = ["python", "-m", "app.guard"]
@@ -147,6 +170,7 @@ BACKEND_ENV_KEYS = frozenset(
         "NEXTUP_DB_ROLE",
         "NEXTUP_MIGRATION_KEY_FILE",
         "NEXTUP_SETUP_CODE_FILE",
+        "NEXTUP_TOKEN_KEY_FILE",
         "NEXTUP_REDIS_URL",
         "NEXTUP_DIAGNOSTIC_INTERVAL_SECONDS",
         "NEXTUP_JOB_FETCH_MIN_INTERVAL_SECONDS",
@@ -623,8 +647,8 @@ def validate_config(config: dict, env: Environment, protected=None) -> None:
 
         values = _environment(service)
         secrets = _service_secrets(service)
-        if set(secrets) != SERVICE_SECRETS.get(sname, set()):
-            expected = sorted(SERVICE_SECRETS.get(sname, set()))
+        if set(secrets) != service_secrets(env, sname):
+            expected = sorted(service_secrets(env, sname))
             fail(f"{sname} receives secrets {sorted(secrets)}, expected {expected}")
         for source, target in secrets.items():
             if target != f"/run/secrets/{source}":
@@ -692,6 +716,10 @@ def _validate_backend(fail, sname, service, values, env, protected) -> None:
         expected[SETUP_CODE_VARIABLE] = "/run/secrets/setup_code"
     elif SETUP_CODE_VARIABLE in values:
         fail(f"{sname} must not set {SETUP_CODE_VARIABLE}")
+    if "token_key" in service_secrets(env, sname):
+        expected[TOKEN_KEY_VARIABLE] = "/run/secrets/token_key"
+    elif TOKEN_KEY_VARIABLE in values:
+        fail(f"{sname} must not set {TOKEN_KEY_VARIABLE}")
     for key, value in expected.items():
         if values.get(key) != value:
             fail(f"{sname} must set {key}={value}")
@@ -755,8 +783,8 @@ def _validate_postgres(fail, postgres, env, protected) -> None:
 
 
 def _validate_secrets(fail, secrets: dict, env) -> None:
-    if set(secrets) != set(SECRET_NAMES):
-        fail(f"top-level secrets must be exactly {sorted(SECRET_NAMES)}")
+    if set(secrets) != set(secret_names(env)):
+        fail(f"top-level secrets must be exactly {sorted(secret_names(env))}")
     for name, secret in secrets.items():
         secret = secret or {}
         if set(secret) - {"file", "name"} or not secret.get("file"):

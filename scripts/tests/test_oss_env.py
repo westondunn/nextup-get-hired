@@ -179,21 +179,51 @@ class RenderedEnvironments(unittest.TestCase):
                 if name in ("api", "worker", "scheduler"):
                     self.assertNotIn("entrypoint", service, name)  # keeps the image's guard exec
 
+    def test_staging_refuses_a_token_key_wherever_it_is_added(self):
+        """Staging refuses integrations, so the key for their stored credentials has no place."""
+
+        def config():
+            return oss_env.static_config(STG, variables(STG))
+
+        oss_env.validate_config(config(), STG, protected())
+        directory = variables(STG)[f"{STG.prefix}SECRETS_DIR"]
+        for mutate in (
+            lambda c: c["services"]["worker"]["environment"].update(
+                NEXTUP_TOKEN_KEY_FILE="/run/secrets/token_key"
+            ),
+            lambda c: c["services"]["api"]["secrets"].append("token_key"),
+            lambda c: c["secrets"].update(token_key={"file": f"{directory}/token_key"}),
+        ):
+            value = config()
+            mutate(value)
+            with self.assertRaises(oss_env.IsolationError):
+                oss_env.validate_config(value, STG, protected())
+
     def test_runtime_services_never_receive_privileged_credentials(self):
         """Acceptance 3: secret scoping per service and environment keys."""
         for env in (DEV, STG):
             services = oss_env.static_config(env, variables(env))["services"]
             for name in ("api", "worker", "scheduler"):
                 service = services[name]
-                # Only the api also receives the local-session setup code.
-                expected = (
-                    ["db_app_password", "setup_code"] if name == "api" else ["db_app_password"]
-                )
-                self.assertEqual(service["secrets"], expected, name)
+                # Only the api also receives the local-session setup code. The api and the
+                # worker receive the key for stored connection credentials, except in
+                # staging, which refuses integrations and has no such key.
+                expected = ["db_app_password"]
+                if name == "api":
+                    expected.append("setup_code")
+                has_token_key = name in ("api", "worker") and env is DEV
+                if has_token_key:
+                    expected.append("token_key")
+                self.assertEqual(service["secrets"], expected, (env.name, name))
                 self.assertEqual(
                     service["environment"].get("NEXTUP_SETUP_CODE_FILE"),
                     "/run/secrets/setup_code" if name == "api" else None,
                     name,
+                )
+                self.assertEqual(
+                    service["environment"].get("NEXTUP_TOKEN_KEY_FILE"),
+                    "/run/secrets/token_key" if has_token_key else None,
+                    (env.name, name),
                 )
                 self.assertEqual(service["environment"]["NEXTUP_DB_USER"], env.role("app"))
                 for key in service["environment"]:

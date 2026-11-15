@@ -77,6 +77,7 @@ SECRET_NAMES = (
     "db_app_password",
     "migration_key",
     "setup_code",
+    "token_key",
 )
 SECRET_VALUE = re.compile(r"^[A-Za-z0-9_-]{24,256}$")
 MAX_SECRET_BYTES = 4096
@@ -89,8 +90,10 @@ SERVICE_SECRETS = {
     "postgres": {"db_admin_password", "db_owner_password", "db_app_password"},
     "migrate": {"db_owner_password", "migration_key"},
     "tests": {"db_owner_password", "db_app_password", "migration_key"},
-    **{name: {"db_app_password"} for name in RUNTIME_SERVICES},
-    "api": {"db_app_password", "setup_code"},
+    "scheduler": {"db_app_password"},
+    # The api stores connection credentials and the worker reads them during sync.
+    "worker": {"db_app_password", "token_key"},
+    "api": {"db_app_password", "setup_code", "token_key"},
 }
 INTERNAL_ONLY = {"postgres", "redis", "worker", "scheduler", "migrate", "tests"}
 LEGACY_NAMES = frozenset(
@@ -400,6 +403,9 @@ def validate_ci(config, secrets_dir=None, e2e_dir=None, expected_user=None):
         # Only the api verifies the local-session setup code.
         setup_code = "/run/secrets/setup_code" if name == "api" else None
         assert env.get("NEXTUP_SETUP_CODE_FILE") == setup_code, f"Setup code wiring in {name}"
+        # Only the api and the worker handle stored connection credentials.
+        token_key = "/run/secrets/token_key" if name in ("api", "worker") else None
+        assert env.get("NEXTUP_TOKEN_KEY_FILE") == token_key, f"Token key wiring in {name}"
     for name in (*RUNTIME_SERVICES, "tests"):
         env = services[name]["environment"]
         # Synthetic fixtures only; live fetching off.

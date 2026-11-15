@@ -68,6 +68,7 @@ The central safety mechanism; most surprising behaviour in this repo traces back
 
 - `load_settings(environ)` / `get_settings()` is the only way a process gets real configuration. It reads `NEXTUP_*` names only, loads `*_FILE` secrets, and **refuses** (rather than ignores) legacy names such as `DATABASE_URL`, `POSTGRES_*`, `PG*`, and unprefixed Google/Adzuna variables.
 - `Settings(...)` can be constructed directly in tests, but then has no database identity.
+- `token_vault.py` encrypts the credentials of a stored connection (decision 0003) with `NEXTUP_TOKEN_KEY_FILE`, a file-only secret mounted into the `api` and `worker` services in dev and CI. Staging has no such key and refuses one (`NXG-C09`).
 - No setting value may appear in an error, log line or `repr`; launcher scripts likewise never echo command output except fixed guard refusal lines. Keep new error messages value-free.
 - Every external integration (Adzuna, Greenhouse, employer boards, Gmail, Google Calendar, external email classifier) is off in every shipped configuration. `sources.require_live_requests(settings)` is the chokepoint each provider entry point must call first; in fixture data mode job sources are served from the bundled `*.fixture.json` files and everything else refuses.
 

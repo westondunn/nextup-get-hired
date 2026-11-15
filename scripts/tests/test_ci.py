@@ -128,12 +128,21 @@ def config(project=PROJECT, secrets_dir=None, e2e_dir=None, user=USER):
         },
         "api": {
             **runtime,
-            "environment": {**runtime_env, "NEXTUP_SETUP_CODE_FILE": "/run/secrets/setup_code"},
-            "secrets": _secrets("db_app_password", "setup_code"),
+            "environment": {
+                **runtime_env,
+                "NEXTUP_SETUP_CODE_FILE": "/run/secrets/setup_code",
+                "NEXTUP_TOKEN_KEY_FILE": "/run/secrets/token_key",
+            },
+            "secrets": _secrets("db_app_password", "setup_code", "token_key"),
             "networks": {"backend": None, "edge": None},
             "ports": [{"host_ip": "127.0.0.1", "published": "0", "target": 8000}],
         },
-        "worker": {**runtime, "command": ["celery", "worker"]},
+        "worker": {
+            **runtime,
+            "environment": {**runtime_env, "NEXTUP_TOKEN_KEY_FILE": "/run/secrets/token_key"},
+            "secrets": _secrets("db_app_password", "token_key"),
+            "command": ["celery", "worker"],
+        },
         "scheduler": {**runtime, "command": ["celery", "beat"], "tmpfs": ["/state"]},
         "frontend": {
             "networks": {"edge": None},
