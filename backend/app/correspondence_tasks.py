@@ -434,8 +434,14 @@ def sync_calendar(
             if row is not None:
                 if row.detection is None:
                     row.detection = _interview_event(subject, event.description)
-                if row.subject != subject or row.body != body or row.received_at != event.starts_at:
+                if (
+                    row.subject != subject
+                    or row.body != body
+                    or row.received_at != event.starts_at
+                    or bool(row.all_day) != event.all_day
+                ):
                     row.subject, row.body, row.received_at = subject, body, event.starts_at
+                    row.all_day = event.all_day
                     row.updated_at = now
                     updated += 1
                 continue
@@ -467,6 +473,7 @@ def sync_calendar(
                     body=body,
                     status="private_note",
                     received_at=event.starts_at,
+                    all_day=event.all_day,
                     notes=INTERVIEW_HINT,
                     source=CALENDAR_SOURCE,
                     source_id=event.source_id,

@@ -21,6 +21,7 @@ from app.guard import facts as F
 from app.guard import marker as M
 from app.guard.errors import GuardError, GuardRefused
 from app.guard.facts import gather
+from app.guard.lineage import load as load_lineage
 from app.guard.plan import Authorization, plan
 
 ALEMBIC_INI = Path(__file__).resolve().parents[1] / "alembic.ini"
@@ -29,6 +30,8 @@ INSTANCE = str(uuid.uuid4())
 PASSWORD = "unit_test_only_password_0123456789"
 SENTINEL = "SENTINEL_value_must_never_leak_8f1c"
 NOW = 1_800_000_000
+# The newest revision in the checked-in chain; the tests plan and apply up to it.
+HEAD = load_lineage().head
 
 
 def environ(env="dev", role="migrator", **extra):
@@ -53,7 +56,7 @@ def settings(env="dev", role="migrator", **extra):
     return load_settings(environ(env, role, **extra))
 
 
-def rows_for(identity, *, initialized=False, revision="0029", **changes):
+def rows_for(identity, *, initialized=False, revision=HEAD, **changes):
     db, user, cluster = identity.database.name, identity.database.user, identity.expected_cluster
     migrator = identity.role == "migrator"
     rows = {
@@ -261,7 +264,7 @@ class TestDirectAlembic:
 
     def test_forged_authorization_objects_are_refused(self, migrator):
         connection = FakeConnection(rows_for(migrator.identity))
-        forged = Authorization("0" * 64, "0" * 64, "INIT", "0029", NOW + 600)
+        forged = Authorization("0" * 64, "0" * 64, "INIT", HEAD, NOW + 600)
         for value in (forged, "nxa1.x.y", object()):
             with pytest.raises(GuardRefused) as caught:
                 command.upgrade(
@@ -410,11 +413,11 @@ class TestApply:
         connection = FakeConnection(rows_for(identity))
         decision, token = token_for(connection, migrator)
         assert decision.mode == "INIT" and token.startswith("nxa1.")
-        run = Recorder(after=initialized_after(identity, "0029"))
+        run = Recorder(after=initialized_after(identity, HEAD))
         applied = guard.apply_in_transaction(
-            connection, migrator, token, operation="upgrade", target="0029", run=run, now=NOW + 5
+            connection, migrator, token, operation="upgrade", target=HEAD, run=run, now=NOW + 5
         )
-        assert applied.mode == "INIT" and run.calls == [("INIT", "0029", "INIT")]
+        assert applied.mode == "INIT" and run.calls == [("INIT", HEAD, "INIT")]
         sql = connection.sql
         position = {
             name: next(i for i, s in enumerate(sql) if s.lstrip().startswith(name))
@@ -441,7 +444,7 @@ class TestApply:
                 migrator,
                 token,
                 operation="upgrade",
-                target="0029",
+                target=HEAD,
                 run=run,
                 now=NOW + 6,
             )
@@ -450,7 +453,7 @@ class TestApply:
         replay = FakeConnection(rows_for(identity), consumed=connection.consumed)
         with pytest.raises(GuardRefused) as caught:
             guard.apply_in_transaction(
-                replay, migrator, token, operation="upgrade", target="0029", run=run, now=NOW + 7
+                replay, migrator, token, operation="upgrade", target=HEAD, run=run, now=NOW + 7
             )
         assert caught.value.code == "NXG-A03"
         assert replay.events[-1] == "ROLLBACK" and len(run.calls) == 1
@@ -466,7 +469,7 @@ class TestApply:
                     migrator,
                     token,
                     operation="upgrade",
-                    target="0029",
+                    target=HEAD,
                     run=run,
                     now=now,
                 )
@@ -490,7 +493,7 @@ class TestApply:
                     migrator,
                     token,
                     operation="upgrade",
-                    target="0029",
+                    target=HEAD,
                     run=run,
                     now=NOW,
                 )
@@ -513,7 +516,7 @@ class TestApply:
                 other_key,
                 token,
                 operation="upgrade",
-                target="0029",
+                target=HEAD,
                 run=run,
                 now=NOW,
             )
@@ -527,7 +530,7 @@ class TestApply:
                     migrator,
                     bad,
                     operation="upgrade",
-                    target="0029",
+                    target=HEAD,
                     run=run,
                     now=NOW,
                 )
@@ -540,7 +543,7 @@ class TestApply:
         for label, changes in {
             "tables, no marker": {F.APPLICATION_TABLES: [(5,)]},
             "alembic only": {
-                F.ALEMBIC_ROWS: [("0029",)],
+                F.ALEMBIC_ROWS: [(HEAD,)],
                 "present": {"alembic_version": True, F.MARKER_TABLE: False},
             },
         }.items():
@@ -552,7 +555,7 @@ class TestApply:
                     migrator,
                     token,
                     operation="upgrade",
-                    target="0029",
+                    target=HEAD,
                     run=run,
                     now=NOW,
                 )
@@ -565,14 +568,14 @@ class TestApply:
 
     def test_noop_and_runtime_role_are_refused(self, migrator):
         identity = migrator.identity
-        at_head = FakeConnection(initialized_after(identity, "0029"))
+        at_head = FakeConnection(initialized_after(identity, HEAD))
         with pytest.raises(GuardRefused) as caught:
             guard.apply_in_transaction(
                 at_head,
                 migrator,
                 "nxa1.a.b",
                 operation="upgrade",
-                target="0029",
+                target=HEAD,
                 run=Recorder(),
                 now=NOW,
             )
@@ -583,7 +586,7 @@ class TestApply:
                 settings(role="runtime"),
                 "nxa1.a.b",
                 operation="upgrade",
-                target="0029",
+                target=HEAD,
                 run=Recorder(),
                 now=NOW,
             )
@@ -600,7 +603,7 @@ class TestApply:
                 migrator,
                 token,
                 operation="upgrade",
-                target="0029",
+                target=HEAD,
                 run=Recorder(failure=failure),
                 now=NOW,
             )
@@ -628,7 +631,7 @@ class TestApply:
                     migrator,
                     token,
                     operation="upgrade",
-                    target="0029",
+                    target=HEAD,
                     run=Recorder(after=after),
                     now=NOW,
                 )
@@ -650,7 +653,7 @@ class TestProgrammaticBinding:
             conn.rows = initialized_after(identity, decision.target)
 
         guard.apply_in_transaction(
-            connection, migrator, token, operation="upgrade", target="0029", run=run, now=NOW
+            connection, migrator, token, operation="upgrade", target=HEAD, run=run, now=NOW
         )
         return connection
 
@@ -674,7 +677,7 @@ class TestProgrammaticBinding:
             attempt(
                 "other connection", {"fn": upgrade, "destination_rev": "head"}, FakeConnection({})
             )
-            attempt("wrong operation", {"fn": downgrade, "destination_rev": "0029"})
+            attempt("wrong operation", {"fn": downgrade, "destination_rev": HEAD})
             attempt("first use", {"fn": upgrade, "destination_rev": "head"})
             attempt("second use", {"fn": upgrade, "destination_rev": "head"})
 
@@ -773,7 +776,7 @@ class TestSingleAuthorizationPolicy:
 
     def test_read_only_commands_need_and_consume_no_authorization(self, migrator):
         connection = FakeConnection(rows_for(migrator.identity))
-        stray = Authorization("0" * 64, "0" * 64, "INIT", "0029", NOW + 600)
+        stray = Authorization("0" * 64, "0" * 64, "INIT", HEAD, NOW + 600)
         guard._register(stray, connection)
         context = FakeContext(
             {"fn": display_version}, {"connection": connection, "nextup_authorization": stray}
@@ -822,7 +825,7 @@ class TestSingleAuthorizationPolicy:
 
         monkeypatch.setattr(guard, "run_alembic_command", alembic_step)
         first = guard.migrate_programmatically(engine, migrator)
-        assert first.mode == "INIT" and ran == [("INIT", "0029")]
+        assert first.mode == "INIT" and ran == [("INIT", HEAD)]
         assert len(engine.consumed) == 1
         sql = engine.connections[-1].sql
         assert "SELECT pg_advisory_xact_lock(:key)" in sql and M.CONSUME in sql
@@ -845,7 +848,7 @@ class TestSingleAuthorizationPolicy:
                 call()
             assert caught.value.code == "NXG-I04"
         assert engine.connections == []  # refused before any connection
-        at_head = FakeEngine(initialized_after(migrator.identity, "0029"))
+        at_head = FakeEngine(initialized_after(migrator.identity, HEAD))
         with pytest.raises(GuardRefused) as caught:  # downgrade outside ci/test: same policy as CLI
             guard.migrate_programmatically(at_head, migrator, operation="downgrade", target="0028")
         assert caught.value.code == "NXG-A06"
@@ -874,4 +877,4 @@ class TestSingleAuthorizationPolicy:
 def guard_decision(mode):
     from app.guard.policy import Decision
 
-    return Decision(mode, None, "0029", ("0001",))
+    return Decision(mode, None, HEAD, ("0001",))

@@ -47,7 +47,7 @@ python3 scripts/local.py --env dev stop      # stop; data is kept
 
 - `start` creates `.env.dev` from `env/dev.env.example` and generates database passwords as files under `.secrets/dev/`. Neither is committed.
 - `start` also generates `.secrets/dev/setup_code`, the code that starts a local session (`POST /api/session`). An installation created before this file existed gets it on its next `start`. Changing or running mail and calendar sync requires that session; enter the code under Settings, Integrations. No other route requires one. See [decisions/0001-local-session-boundary.md](decisions/0001-local-session-boundary.md).
-- `start` never migrates. Until `migrate` has initialised the schema, the services refuse to work. `migrate` shows a read-only plan first and applies it only after you type the confirmation code it prints.
+- `start` never migrates. Until `migrate` has initialised the schema, the services refuse to work. The same applies after an update that adds a migration revision: the services refuse with `NXG-L03` until `migrate` has been run again. `migrate` shows a read-only plan first and applies it only after you type the confirmation code it prints.
 - The API and the web interface are published on the loopback interface only, by default on ports 18000 and 15173.
 - Open them as `127.0.0.1` or `localhost`. The API answers `400` to any other host name, and `403` to a state-changing request that a browser reports as coming from another origin. A proxy in front of the API must forward the browser's `Host` header unchanged, as `frontend/vite.config.ts` does. See [decisions/0001-local-session-boundary.md](decisions/0001-local-session-boundary.md).
 - There is no command that removes data volumes.
@@ -70,3 +70,4 @@ Work happens on short-lived topic branches that are merged into `main` through p
 
 - The files under `backend/migrations/versions/` are pinned by SHA-256 in `backend/migrations/LINEAGE.sha256`. The migration guard refuses to run if a single byte differs, so never edit or reformat an existing revision, including its comments and line endings.
 - Migrations run only through the guard, which checks which database it is connected to before it changes anything.
+- Revisions added after the pinned history are named `oss_NNNN` and extend the same chain. The first is `oss_0030`. They are not added to the pin file.

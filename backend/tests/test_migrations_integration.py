@@ -31,6 +31,9 @@ pytestmark = pytest.mark.skipif(
     os.environ.get("RUN_INTEGRATION") != "1", reason="Requires PostgreSQL with CREATEDB"
 )
 PAIRS = [(f"{n:04d}", f"{n - 1:04d}" if n > 1 else "base") for n in range(1, 30)]
+# Revisions added after the pinned history are named oss_NNNN and continue the same chain.
+PAIRS += [("oss_0030", "0029")]
+HEAD = PAIRS[-1][0]
 # Downgrade to base is not authorizable; 0001 is covered by INIT and the head <-> 0001 chain.
 ROUND_TRIPS = PAIRS[1:]
 TABLES = {
@@ -160,8 +163,10 @@ ADDED = {
         "correspondence_sync_settings": "auto_create_applications",
     },
     27: {"pursuits": "company_id", "contacts": "company_id"},
+    30: {"communications": "all_day"},
 }
 DIAGNOSTIC_ID = "11111111-1111-4111-8111-111111111111"
+EVENT_ID = "44444444-4444-4444-8444-444444444444"
 FETCH_ID = "22222222-2222-4222-8222-222222222222"
 SEARCH_ID = "33333333-3333-4333-8333-333333333333"
 
@@ -225,6 +230,11 @@ def cli(engine, action, target=None, expected_error=None):
         assert expected_error in result.stdout + result.stderr
 
 
+def revision_number(revision):
+    """Position in the chain: 0 for base, 1-29 for the pinned ids, 30 onward for oss_NNNN."""
+    return 0 if revision == "base" else int(revision.removeprefix("oss_"))
+
+
 def execute(engine, statement, **parameters):
     with engine.begin() as connection:
         connection.execute(text(statement), parameters)
@@ -274,7 +284,7 @@ def assert_revision(engine, revision):
     assert state["rows"]["alembic_version"] == (
         [] if revision == "base" else [{"version_num": revision}]
     )
-    number = 0 if revision == "base" else int(revision)
+    number = revision_number(revision)
     expected = {
         name: set(columns.split())
         for name, (introduced, columns) in TABLES.items()
@@ -326,7 +336,7 @@ def seed_company_sources(engine):
 
 def seed_legacy(engine, revision):
     """Synthetic rows valid at the old revision, independent of current ORM models."""
-    number = 0 if revision == "base" else int(revision)
+    number = revision_number(revision)
     if number == 26:
         seed_company_sources(engine)
     if number >= 1:
@@ -391,12 +401,12 @@ def test_each_revision_round_trip_preserves_compatible_data(migration_database, 
 
 def test_empty_database_full_chain_and_model_agreement(migration_database):
     scripts = ScriptDirectory.from_config(Config("alembic.ini"))
-    assert scripts.get_heads() == ["0029"], "Extend the migration expectations for the new head"
+    assert scripts.get_heads() == [HEAD], "Extend the migration expectations for the new head"
     assert [
         (r.revision, r.down_revision or "base") for r in reversed(list(scripts.walk_revisions()))
     ] == PAIRS
     cli(migration_database, "upgrade", "head")
-    assert_revision(migration_database, "0029")
+    assert_revision(migration_database, HEAD)
     head = snapshot(migration_database)
     cli(migration_database, "downgrade", "0001")
     assert_revision(migration_database, "0001")
@@ -574,7 +584,9 @@ def test_early_destructive_downgrades_drop_only_their_tables(
     cli(engine, "upgrade", revision)
     seed_legacy(engine, revision)
     before = snapshot(engine)
-    removed = {name for name, (introduced, _) in TABLES.items() if introduced == int(revision)}
+    removed = {
+        name for name, (introduced, _) in TABLES.items() if introduced == revision_number(revision)
+    }
     assert all(before["rows"][table] for table in removed)
     cli(engine, "downgrade", previous)
     assert_revision(engine, previous)
@@ -787,3 +799,37 @@ def test_normalize_function_matches_the_python_mirror(migration_database):
                 text("SELECT nextup_normalize_company(:value)"), {"value": sample}
             )
             assert database == normalize_company_name(sample), sample
+
+
+def test_all_day_flag_keeps_imported_events_through_upgrade_and_downgrade(migration_database):
+    engine = migration_database
+
+    def events():
+        return snapshot(engine)["rows"]["communications"]
+
+    cli(engine, "upgrade", "0029")
+    execute(
+        engine,
+        "INSERT INTO communications (id,channel,direction,subject,body,status,received_at,"
+        "source,source_id) VALUES (:id,'other','note','Synthetic all-day event','When: all day',"
+        "'private_note','2027-03-14T00:00:00Z','calendar','synthetic-event')",
+        id=EVENT_ID,
+    )
+    before = events()
+    assert len(before) == 1 and "all_day" not in before[0]
+
+    # The upgrade adds the flag as false and infers nothing from the note text.
+    cli(engine, "upgrade", "oss_0030")
+    upgraded = events()
+    assert [row["all_day"] for row in upgraded] == [False]
+    assert [{key: row[key] for key in before[0]} for row in upgraded] == before
+    with pytest.raises(IntegrityError):
+        execute(engine, "UPDATE communications SET all_day = NULL WHERE id = :id", id=EVENT_ID)
+
+    # The downgrade drops only the flag; the event and its text stay.
+    execute(engine, "UPDATE communications SET all_day = true WHERE id = :id", id=EVENT_ID)
+    cli(engine, "downgrade", "0029")
+    assert_revision(engine, "0029")
+    assert events() == before
+    cli(engine, "upgrade", "oss_0030")
+    assert [row["all_day"] for row in events()] == [False]
