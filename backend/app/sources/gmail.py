@@ -74,21 +74,35 @@ def _read_json(client: httpx.Client, method: str, url: str, **kwargs) -> dict:
     return payload
 
 
-def refresh_access_token(client: httpx.Client, settings: Settings) -> str:
+def request_access_token(
+    client: httpx.Client,
+    settings: Settings,
+    *,
+    client_id: str,
+    client_secret: str,
+    refresh_token: str,
+) -> dict:
+    """Exchange a refresh token at Google's token endpoint and return its answer.
+
+    Shared by both capabilities and both credential sources: the configuration fallback
+    below, and the stored connection (``app.google_credentials``).
+    """
     require_live_requests(settings)
-    if not credentials_present(settings):
-        raise SourceError("not_configured", "Gmail credentials are not configured.")
-    payload = _read_json(
+    return _read_json(
         client,
         "POST",
         TOKEN_URL,
         data={
-            "client_id": settings.google_oauth_client_id.get_secret_value(),
-            "client_secret": settings.google_oauth_client_secret.get_secret_value(),
-            "refresh_token": settings.gmail_refresh_token.get_secret_value(),
+            "client_id": client_id,
+            "client_secret": client_secret,
+            "refresh_token": refresh_token,
             "grant_type": "refresh_token",
         },
     )
+
+
+def checked_access_token(payload: dict) -> str:
+    """The access token of a token response that carries the Gmail read-only scope."""
     token = payload.get("access_token")
     scope = payload.get("scope", SCOPE)
     if not isinstance(token, str) or not token:
@@ -96,6 +110,22 @@ def refresh_access_token(client: httpx.Client, settings: Settings) -> str:
     if scope and SCOPE not in scope.split():
         raise SourceError("wrong_scope", "The stored token lacks the Gmail read-only scope.")
     return token
+
+
+def refresh_access_token(client: httpx.Client, settings: Settings) -> str:
+    """An access token from the credentials in configuration (the fallback path)."""
+    require_live_requests(settings)
+    if not credentials_present(settings):
+        raise SourceError("not_configured", "Gmail credentials are not configured.")
+    return checked_access_token(
+        request_access_token(
+            client,
+            settings,
+            client_id=settings.google_oauth_client_id.get_secret_value(),
+            client_secret=settings.google_oauth_client_secret.get_secret_value(),
+            refresh_token=settings.gmail_refresh_token.get_secret_value(),
+        )
+    )
 
 
 def list_message_refs(

@@ -11,6 +11,7 @@ from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
+from app import google_credentials
 from app.application_intake import ensure_review_rule
 from app.config import get_settings
 from app.correspondence_tasks import review_count, sync_calendar_task, sync_gmail_task
@@ -18,11 +19,27 @@ from app.db import get_session
 from app.followup_tasks import INBOUND_REPLY_RULE
 from app.local_session import require_session
 from app.models import CorrespondenceSyncSettings, FollowUpRule
-from app.sources.gmail import credentials_present
 
 router = APIRouter(prefix="/api/correspondence", tags=["correspondence"])
 Database = Annotated[Session, Depends(get_session)]
 logger = logging.getLogger(__name__)
+
+GMAIL_SWITCHED_OFF = (
+    "Gmail sync is switched off in this installation's configuration and cannot be turned on "
+    "from here."
+)
+CALENDAR_SWITCHED_OFF = (
+    "Calendar sync is switched off in this installation's configuration and cannot be turned "
+    "on from here."
+)
+GMAIL_NOT_CONNECTED = (
+    "Gmail sync cannot be turned on yet: no Google connection that includes Gmail access "
+    "can be used."
+)
+CALENDAR_NOT_CONNECTED = (
+    "Calendar sync cannot be turned on yet: no Google connection that includes Calendar "
+    "access can be used."
+)
 
 
 class CorrespondenceInput(BaseModel):
@@ -51,7 +68,10 @@ def _out(config: CorrespondenceSyncSettings | None, session: Session) -> dict:
     return {
         **body,
         "live_enabled": settings.gmail_sync_enabled,
-        "credentials_present": credentials_present(settings),
+        # Whether a sync would have credentials to use: a stored connection that grants
+        # the capability, or the complete fallback in configuration.
+        "credentials_present": google_credentials.usable(session, settings, "gmail"),
+        "calendar_credentials_present": google_credentials.usable(session, settings, "calendar"),
         "interval_seconds": settings.gmail_sync_interval_seconds,
         "last_run_at": config.last_run_at if config else None,
         "last_status": config.last_status if config else "not_run",
@@ -77,20 +97,18 @@ def read_correspondence(session: Database):
 @router.put("", dependencies=[Depends(require_session)])
 def save_correspondence(body: CorrespondenceInput, session: Database):
     settings = get_settings()
-    if body.enabled and not (settings.gmail_sync_enabled and credentials_present(settings)):
-        raise HTTPException(
-            409,
-            "Gmail sync is switched off in this installation's configuration and cannot be "
-            "turned on from here.",
-        )
-    if body.calendar_enabled and not (
-        settings.calendar_sync_enabled and credentials_present(settings)
-    ):
-        raise HTTPException(
-            409,
-            "Calendar sync is switched off in this installation's configuration and cannot be "
-            "turned on from here.",
-        )
+    # Turning a sync on needs its flag in configuration and credentials it could use
+    # (decision 0003, section 9).
+    if body.enabled:
+        if not settings.gmail_sync_enabled:
+            raise HTTPException(409, GMAIL_SWITCHED_OFF)
+        if not google_credentials.usable(session, settings, "gmail"):
+            raise HTTPException(409, GMAIL_NOT_CONNECTED)
+    if body.calendar_enabled:
+        if not settings.calendar_sync_enabled:
+            raise HTTPException(409, CALENDAR_SWITCHED_OFF)
+        if not google_credentials.usable(session, settings, "calendar"):
+            raise HTTPException(409, CALENDAR_NOT_CONNECTED)
     session.execute(insert(CorrespondenceSyncSettings).values(id=1).on_conflict_do_nothing())
     config = session.get(CorrespondenceSyncSettings, 1, with_for_update=True)
     if config.query != body.query:

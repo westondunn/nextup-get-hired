@@ -530,7 +530,7 @@ export default function SettingsView() {
             <p className="mt-1 text-xs text-red-600">{mail.calendar_last_error}</p>
           )}
         </IntegrationCard>
-        {mail && !(mail.calendar_live_enabled && mail.credentials_present) && (
+        {mail && !(mail.calendar_live_enabled && mail.calendar_credentials_present) && (
           <p className="-mt-2 mb-3 text-[11px] text-amber-700">
             Calendar sync is switched off in this release and cannot be enabled from here yet.
           </p>

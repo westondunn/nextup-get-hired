@@ -14,7 +14,7 @@ import httpx
 import pytest
 from pydantic import SecretStr
 
-from app import job_tasks, jobs
+from app import google_credentials, job_tasks, jobs
 from app.config import Settings, load_settings
 from app.guard.errors import ConfigError
 from app.sources import (
@@ -87,6 +87,13 @@ PROVIDER_CALLS = {
         c, s, google_oauth.Grant("access", "refresh", frozenset({gmail.SCOPE}))
     ),
     "google-revoke": lambda s, c: google_oauth.revoke(c, s, "refresh"),
+    "google-refresh": lambda s, c: gmail.request_access_token(
+        c, s, client_id="id", client_secret="secret", refresh_token="refresh"
+    ),
+    "google-stored-credentials": lambda s, c: google_credentials.resolve(MagicMock(), s, "gmail"),
+    "google-stored-token": lambda s, c: google_credentials.access_token(
+        c, MagicMock(), s, google_credentials.Credentials("id", "secret", "refresh"), "calendar"
+    ),
 }
 
 

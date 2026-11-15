@@ -13,7 +13,7 @@ import httpx
 
 from app.config import Settings
 from app.sources.common import SourceError, plain_text, require_live_requests
-from app.sources.gmail import _read_json, credentials_present
+from app.sources.gmail import _read_json, credentials_present, request_access_token
 
 API_BASE = "https://www.googleapis.com/calendar/v3/calendars/primary/events"
 SCOPE = "https://www.googleapis.com/auth/calendar.readonly"
@@ -37,22 +37,8 @@ class ParsedEvent:
     attendee_names: tuple[str, ...] = field(default_factory=tuple)
 
 
-def refresh_access_token(client: httpx.Client, settings: Settings) -> str:
-    """Refresh the shared Google token and require the calendar read-only scope."""
-    require_live_requests(settings)
-    if not credentials_present(settings):
-        raise SourceError("not_configured", "Google credentials are not configured.")
-    payload = _read_json(
-        client,
-        "POST",
-        "https://oauth2.googleapis.com/token",
-        data={
-            "client_id": settings.google_oauth_client_id.get_secret_value(),
-            "client_secret": settings.google_oauth_client_secret.get_secret_value(),
-            "refresh_token": settings.gmail_refresh_token.get_secret_value(),
-            "grant_type": "refresh_token",
-        },
-    )
+def checked_access_token(payload: dict) -> str:
+    """The access token of a token response that carries the Calendar read-only scope."""
     token = payload.get("access_token")
     scope = payload.get("scope", "")
     if not isinstance(token, str) or not token:
@@ -63,6 +49,22 @@ def refresh_access_token(client: httpx.Client, settings: Settings) -> str:
             "The stored token lacks the Calendar read-only scope; re-authorize Google access.",
         )
     return token
+
+
+def refresh_access_token(client: httpx.Client, settings: Settings) -> str:
+    """An access token from the credentials in configuration (the fallback path)."""
+    require_live_requests(settings)
+    if not credentials_present(settings):
+        raise SourceError("not_configured", "Google credentials are not configured.")
+    return checked_access_token(
+        request_access_token(
+            client,
+            settings,
+            client_id=settings.google_oauth_client_id.get_secret_value(),
+            client_secret=settings.google_oauth_client_secret.get_secret_value(),
+            refresh_token=settings.gmail_refresh_token.get_secret_value(),
+        )
+    )
 
 
 def list_events(

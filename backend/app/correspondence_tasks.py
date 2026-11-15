@@ -17,7 +17,7 @@ from sqlalchemy import Integer, func, or_, select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
-from app import application_detect, email_classifications
+from app import application_detect, email_classifications, google_credentials
 from app.celery_app import celery_app
 from app.config import Settings, get_settings
 from app.db import get_engine
@@ -230,16 +230,22 @@ def sync_gmail(
     config = session.get(CorrespondenceSyncSettings, 1, with_for_update=True)
     if config is None or not config.enabled:
         return {"status": "disabled", "imported": 0}
-    if not settings.gmail_sync_enabled or not gmail.credentials_present(settings):
+    if not settings.gmail_sync_enabled:
         _record_result(config, "not_configured", "Gmail credentials are not configured.", 0)
         return {"status": "not_configured", "imported": 0}
+    try:
+        # The stored connection, or the fallback in configuration. Contacts nothing.
+        credentials = google_credentials.resolve(session, settings, "gmail")
+    except SourceError as exc:
+        _record_result(config, exc.code, exc.message, 0)
+        return {"status": exc.code, "imported": 0, "error": exc.message}
     if client is None:
         with httpx.Client(timeout=10, follow_redirects=False, trust_env=False) as owned:
             return sync_gmail(session, settings, client=owned, now=now)
 
     imported = 0
     try:
-        token = gmail.refresh_access_token(client, settings)
+        token = google_credentials.access_token(client, session, settings, credentials, "gmail")
         lookback = now - timedelta(days=INITIAL_LOOKBACK_DAYS)
         after = config.cursor_epoch or int(lookback.timestamp())
         query = f"{config.query.strip()} after:{after}".strip()
@@ -393,16 +399,22 @@ def sync_calendar(
     config = session.get(CorrespondenceSyncSettings, 1, with_for_update=True)
     if config is None or not config.calendar_enabled:
         return {"status": "disabled", "imported": 0}
-    if not settings.calendar_sync_enabled or not gmail.credentials_present(settings):
+    if not settings.calendar_sync_enabled:
         _calendar_result(config, "not_configured", "Google credentials are not configured.", 0)
         return {"status": "not_configured", "imported": 0}
+    try:
+        # The stored connection, or the fallback in configuration. Contacts nothing.
+        credentials = google_credentials.resolve(session, settings, "calendar")
+    except SourceError as exc:
+        _calendar_result(config, exc.code, exc.message, 0)
+        return {"status": exc.code, "imported": 0, "error": exc.message}
     if client is None:
         with httpx.Client(timeout=10, follow_redirects=False, trust_env=False) as owned:
             return sync_calendar(session, settings, client=owned, now=now)
 
     imported = updated = 0
     try:
-        token = google_calendar.refresh_access_token(client, settings)
+        token = google_credentials.access_token(client, session, settings, credentials, "calendar")
         start, end = google_calendar.window(now, config.calendar_lookahead_days)
         events = [
             parsed
