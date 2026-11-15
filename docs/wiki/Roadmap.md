@@ -21,4 +21,4 @@ This page is a summary. The ordered outcomes are in [docs/ROADMAP.md](../ROADMAP
 
 See the [security policy](../../SECURITY.md) for the full list and for how to report a vulnerability privately.
 
-Published from commit `71011e7`. Last synchronized: 2026-11-13 (wiki revision `557ed05`). This draft has changed since then and has not been republished.
+Published from commit `de6bc87`. Last synchronized: 2026-11-14 (wiki revision `9d62f1b`).
