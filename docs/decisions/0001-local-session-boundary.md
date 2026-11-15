@@ -77,6 +77,8 @@ Routes in scope when layer 3 first ships:
 - `PUT /api/correspondence` and `POST /api/correspondence/sync`, which switch sync on and trigger it;
 - every route added for the Google connection ([#10](https://github.com/westondunn/nextup-get-hired/issues/10), [#11](https://github.com/westondunn/nextup-get-hired/issues/11)).
 
+**Proposed amendment, 2026-11-14.** [Decision 0003](0003-google-connection.md) proposes one exception: the address Google redirects back to cannot require the session cookie, because a `SameSite=Strict` cookie is not sent on a navigation from another site. That record describes the checks that replace it. The exception takes effect only if decision 0003 is accepted.
+
 The rest of the application stays usable without a session, so the default installation needs no extra step.
 
 ### Refusal behaviour

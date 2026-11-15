@@ -80,7 +80,7 @@ This remains the first connection to be completed and validated. It is not suppo
   - Tracking: [#9](https://github.com/westondunn/nextup-get-hired/issues/9)
   - Priority and dependencies: P1; blocked by [#7](https://github.com/westondunn/nextup-get-hired/issues/7)
   - Suggested branch: `docs/9-google-oauth-adr`
-  - Contributor notes: decision record under `docs/decisions/`; must cite current official Google documentation; includes who owns the client registration (bring-your-own is the working assumption, a project-managed registration is the alternative)
+  - Contributor notes: decision record under `docs/decisions/`; must cite current official Google documentation; the registration is user-owned (decided by the maintainer on 2026-11-14); the record is proposed in [decision 0003](decisions/0003-google-connection.md)
   - Contribution availability: maintainer-only
   - Complete when: the decision record is reviewed and merged
   - Evidence: pending
