@@ -13,7 +13,7 @@ from app.config import Settings
 from app.correspondence_tasks import sync_calendar
 from app.db import get_session
 from app.main import app
-from app.models import Contact, CorrespondenceSyncSettings, Pursuit
+from app.models import Contact, CorrespondenceSyncSettings, GoogleConnection, Pursuit
 from app.sources import google_calendar as cal
 from app.sources.common import SourceError
 
@@ -112,9 +112,11 @@ def test_list_events_sends_utc_window_and_rejects_bad_payload():
     assert seen["timeMin"] == "2026-11-01T00:00:00Z" and seen["maxResults"] == "100"
 
 
-def fake_session(config, contacts=(), pursuits=(), existing=()):
+def fake_session(config, contacts=(), pursuits=(), existing=(), connection=None):
     session = MagicMock()
-    session.get.return_value = config
+    # The sync reads its own settings and the stored Google connection, if there is one.
+    rows = {CorrespondenceSyncSettings: config, GoogleConnection: connection}
+    session.get.side_effect = lambda model, *args, **kwargs: rows[model]
     session.added = []
     session.add.side_effect = session.added.append
 

@@ -19,7 +19,7 @@ from app.config import Settings
 from app.correspondence_tasks import suggest_pursuit, sync_gmail
 from app.db import get_session
 from app.main import app
-from app.models import Communication, Contact, CorrespondenceSyncSettings, Pursuit
+from app.models import Communication, Contact, CorrespondenceSyncSettings, GoogleConnection, Pursuit
 from app.sources import gmail
 from app.sources.common import SourceError
 
@@ -205,10 +205,12 @@ def test_suggest_pursuit_reads_tracking_mailers_recruiter_subjects_and_bodies():
     assert suggest_pursuit(parsed("r@northwind.example", both), rows) is northwind
 
 
-def fake_session(config, contacts=(), pursuits=(), known=(), unclassified=()):
+def fake_session(config, contacts=(), pursuits=(), known=(), unclassified=(), connection=None):
     """A MagicMock session that answers the four queries the sync performs."""
     session = MagicMock()
-    session.get.return_value = config
+    # The sync reads its own settings and the stored Google connection, if there is one.
+    rows = {CorrespondenceSyncSettings: config, GoogleConnection: connection}
+    session.get.side_effect = lambda model, *args, **kwargs: rows[model]
     session.added = []
     session.add.side_effect = session.added.append
 

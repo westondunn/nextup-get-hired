@@ -1,7 +1,8 @@
 """The stored Google connection, written and read by the runtime role.
 
 First through the model, then through the routes that save and report the user's client,
-then through the consent flow with every Google call mocked.
+then through the consent flow, and last through sync using the stored grant. Every Google
+call is mocked.
 """
 
 import os
@@ -13,16 +14,19 @@ from pydantic import SecretStr
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError, OperationalError
 from sqlalchemy.orm import Session
+from test_gmail import FakeGmail, message_payload
+from test_google_calendar import FakeCalendar, event_payload
 from test_google_consent import Google, Redis
 from test_profile_integration import profile_client as profile_client
 from test_profile_integration import profile_database as profile_database
 
-from app import google_connection, google_consent, token_vault
+from app import correspondence, google_connection, google_consent, google_credentials, token_vault
 from app.config import Settings
+from app.correspondence_tasks import sync_calendar, sync_gmail
 from app.google_connection import CLIENT_IN_USE, CLIENT_SECRET_PURPOSE, REFRESH_TOKEN_PURPOSE
 from app.google_consent import CALLBACK_PATH, FLOW_REFUSED, FlowStore, get_flow_store
 from app.main import app
-from app.models import GoogleConnection
+from app.models import Communication, CorrespondenceSyncSettings, GoogleConnection
 from app.sources import gmail, google_calendar, google_oauth
 
 pytestmark = pytest.mark.skipif(
@@ -469,3 +473,157 @@ def test_a_flow_that_does_not_complete_leaves_the_connection_as_it_was(consent, 
     )
     assert (unknown.status_code, unknown.json()) == (400, {"detail": FLOW_REFUSED})
     assert unchanged()
+
+
+# ---------- sync with the stored grant, the runtime role and a real table ----------
+
+MAIL_ON = {"enabled": True, "query": "label:synthetic", "max_messages_per_run": 10}
+CALENDAR_ON = {**MAIL_ON, "enabled": False, "calendar_enabled": True}
+
+
+def refresh_requests(fake):
+    return [
+        parse_qs(request.content.decode())
+        for request in fake.requests
+        if request.url.host == "oauth2.googleapis.com"
+    ]
+
+
+def test_sync_uses_the_grant_the_consent_flow_stored(consent, profile_database, monkeypatch):
+    """No Google credential is in configuration: both syncs run on the stored connection."""
+    engine, _ = profile_database
+    client, google = consent
+    monkeypatch.setattr(correspondence, "get_settings", lambda: BOTH_ON)
+
+    # Before an account is connected, neither sync can be turned on.
+    for body, message in (
+        (MAIL_ON, correspondence.GMAIL_NOT_CONNECTED),
+        (CALENDAR_ON, correspondence.CALENDAR_NOT_CONNECTED),
+    ):
+        refused = client.put("/api/correspondence", json=body)
+        assert (refused.status_code, refused.json()) == (409, {"detail": message})
+    report = client.get("/api/correspondence").json()
+    assert (report["credentials_present"], report["calendar_credentials_present"]) == (False, False)
+
+    # Calendar alone is granted: calendar sync can be turned on, mail sync still cannot.
+    google.token = token_response(REFRESH_TOKEN, google_calendar.SCOPE)
+    google.calendar = httpx.Response(200, json={"id": FIRST_ADDRESS})
+    assert connect(client, ("gmail", "calendar")).headers["location"] == "/?google=connected"
+    report = client.get("/api/correspondence").json()
+    assert (report["credentials_present"], report["calendar_credentials_present"]) == (False, True)
+    assert client.put("/api/correspondence", json=MAIL_ON).status_code == 409
+    assert client.put("/api/correspondence", json=CALENDAR_ON).status_code == 200
+
+    calendar = FakeCalendar(
+        [event_payload("e1", "Synthetic interview", "2026-11-20T15:00:00Z")],
+        scope=google_calendar.SCOPE,
+    )
+    with Session(engine) as session, session.begin():
+        with calendar.client() as http:
+            result = sync_calendar(session, BOTH_ON, client=http)
+    assert (result["status"], result["imported"]) == ("ok", 1)
+    assert refresh_requests(calendar) == [
+        {
+            "client_id": [CLIENT_ID],
+            "client_secret": [CLIENT_SECRET],
+            "refresh_token": [REFRESH_TOKEN],
+            "grant_type": ["refresh_token"],
+        }
+    ]
+
+    # Mail sync was never granted. Switched on directly, it reports why and imports nothing.
+    with Session(engine) as session, session.begin():
+        session.get(CorrespondenceSyncSettings, 1).enabled = True
+    mail = FakeGmail(
+        [message_payload("m1", "a@example.invalid", "Hello", "Body", 1_700_000_000_000)]
+    )
+    with Session(engine) as session, session.begin():
+        with mail.client() as http:
+            result = sync_gmail(session, BOTH_ON, client=http)
+    assert (result["status"], mail.requests) == ("capability_not_granted", [])
+    with Session(engine) as session:
+        config = session.get(CorrespondenceSyncSettings, 1)
+        assert config.last_status == "capability_not_granted"
+        assert config.calendar_last_status == "ok"
+        sources = session.scalars(select(Communication.source)).all()
+        assert len(sources) == 1  # the calendar event, and no mail
+
+    # Gmail is added to the same account. Mail sync now runs on the new grant.
+    both = f"{gmail.SCOPE} {google_calendar.SCOPE}"
+    google.token = token_response("synthetic-second-refresh-token", both)
+    google.profile = httpx.Response(200, json={"emailAddress": FIRST_ADDRESS})
+    assert connect(client, ("gmail",)).headers["location"] == "/?google=connected"
+    assert client.get("/api/correspondence").json()["credentials_present"] is True
+    with Session(engine) as session, session.begin():
+        with mail.client() as http:
+            result = sync_gmail(session, BOTH_ON, client=http)
+    assert (result["status"], result["imported"]) == ("ok", 1)
+    assert refresh_requests(mail)[0]["refresh_token"] == ["synthetic-second-refresh-token"]
+
+
+def test_a_newly_issued_refresh_token_is_stored_before_the_sync_ends(consent, profile_database):
+    engine, _ = profile_database
+    client, google = consent
+    google.token = token_response(REFRESH_TOKEN, gmail.SCOPE)
+    google.profile = httpx.Response(200, json={"emailAddress": FIRST_ADDRESS})
+    assert connect(client, ("gmail",)).headers["location"] == "/?google=connected"
+    before = row_of(engine)
+
+    def issuing(request):
+        payload = {
+            "access_token": "synthetic-access",
+            "scope": gmail.SCOPE,
+            "refresh_token": "synthetic-issued-refresh-token",
+        }
+        return httpx.Response(200, json=payload)
+
+    with Session(engine) as session, session.begin():
+        credentials = google_credentials.resolve(session, BOTH_ON, "gmail")
+        assert credentials.refresh_token == REFRESH_TOKEN
+        with httpx.Client(transport=httpx.MockTransport(issuing)) as http:
+            token = google_credentials.access_token(http, session, BOTH_ON, credentials, "gmail")
+        assert token == "synthetic-access"
+        # The sync's own transaction is still open. The change is already committed, and
+        # the row lock it was made under has been given up.
+        with Session(engine) as other, other.begin():
+            row = other.scalar(select(GoogleConnection).with_for_update(nowait=True))
+            assert opened_refresh_token(row) == "synthetic-issued-refresh-token"
+    after = row_of(engine)
+    assert "synthetic-issued-refresh-token" not in after.refresh_token_sealed
+    assert after.updated_at > before.updated_at
+    assert (after.state, after.granted_scopes, after.account_address, after.client_id) == (
+        before.state,
+        before.granted_scopes,
+        before.account_address,
+        before.client_id,
+    )
+    # The next refresh uses the new token.
+    with Session(engine) as session:
+        again = google_credentials.resolve(session, BOTH_ON, "gmail")
+        assert again.refresh_token == "synthetic-issued-refresh-token"
+
+
+def test_a_stored_connection_is_used_even_when_the_fallback_is_complete(consent, profile_database):
+    engine, _ = profile_database
+    client, google = consent
+    fallback = BOTH_ON.model_copy(
+        update={
+            "google_oauth_client_id": SecretStr("synthetic-fallback-client"),
+            "google_oauth_client_secret": SecretStr("synthetic-fallback-secret"),
+            "gmail_refresh_token": SecretStr("synthetic-fallback-token"),
+        }
+    )
+    with Session(engine) as session:
+        # A client is saved but no account is connected: the fallback is what sync has.
+        found = google_credentials.resolve(session, fallback, "gmail")
+        assert (found.client_id, found.stored_as) == ("synthetic-fallback-client", None)
+    google.token = token_response(REFRESH_TOKEN, gmail.SCOPE)
+    google.profile = httpx.Response(200, json={"emailAddress": FIRST_ADDRESS})
+    assert connect(client, ("gmail",)).headers["location"] == "/?google=connected"
+    with Session(engine) as session:
+        found = google_credentials.resolve(session, fallback, "gmail")
+        assert (found.client_id, found.refresh_token) == (CLIENT_ID, REFRESH_TOKEN)
+        # The grant does not include Calendar, and the fallback does not stand in for it.
+        with pytest.raises(google_credentials.SourceError) as caught:
+            google_credentials.resolve(session, fallback, "calendar")
+        assert caught.value.code == "capability_not_granted"
