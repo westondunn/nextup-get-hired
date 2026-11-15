@@ -1,7 +1,10 @@
 """The key that encrypts stored connection credentials, and the encryption itself."""
 
 import base64
+import importlib.util
 import os
+import re
+from pathlib import Path
 
 import pytest
 from pydantic import SecretStr
@@ -150,3 +153,20 @@ def test_the_key_comes_from_the_loaded_settings_when_none_are_passed(monkeypatch
     assert vault.open_sealed(sealed, purpose="p") == SECRET and vault.available()
     monkeypatch.setattr(vault, "get_settings", lambda: Settings())
     assert vault.available() is False
+
+
+def test_the_database_check_accepts_sealed_values_and_refuses_plain_ones():
+    """The connection table refuses a credential that is not in the sealed form.
+
+    The pattern lives in the migration; this keeps it in step with what ``seal`` produces.
+    """
+    path = Path(__file__).parents[1] / "migrations/versions/oss_0031_google_connection.py"
+    spec = importlib.util.spec_from_file_location("oss_0031_google_connection", path)
+    migration = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(migration)
+    pattern = re.compile(migration.SEALED.strip("'"))
+    for value in ("", "x", SECRET, "synthetic value " * 40):
+        sealed = vault.seal(value, purpose="google.refresh_token", settings=WITH_KEY)
+        assert pattern.fullmatch(sealed)
+    for plain in (SECRET, "GOCSPX-synthetic-client-secret", "1//0synthetic-refresh-token", ""):
+        assert not pattern.fullmatch(plain)

@@ -13,7 +13,7 @@ from sqlalchemy.orm import Session
 from app import token_vault
 from app.config import get_settings
 from app.db import get_engine
-from app.models import DiagnosticRun
+from app.models import DiagnosticRun, GoogleConnection
 from app.tasks import run_diagnostic
 
 pytestmark = pytest.mark.skipif(
@@ -117,3 +117,35 @@ def test_the_api_container_can_encrypt_with_the_mounted_token_key():
     sealed = token_vault.seal("synthetic value", purpose="integration-test")
     assert sealed.startswith("v1.") and "synthetic value" not in sealed
     assert token_vault.open_sealed(sealed, purpose="integration-test") == "synthetic value"
+
+
+def test_the_api_container_can_store_a_sealed_credential_in_the_connection_table():
+    """The runtime role of the real stack can use the table, with the mounted key.
+
+    The row is synthetic and is removed again, so the stack is left with no connection.
+    """
+    purpose = "integration-test"
+    with Session(get_engine()) as session, session.begin():
+        assert session.get(GoogleConnection, 1) is None
+    try:
+        with Session(get_engine()) as session, session.begin():
+            session.add(
+                GoogleConnection(
+                    id=1,
+                    client_id="synthetic-client",
+                    client_secret_sealed=token_vault.seal("synthetic value", purpose=purpose),
+                )
+            )
+        with Session(get_engine()) as session, session.begin():
+            row = session.scalar(select(GoogleConnection).with_for_update())
+            assert (row.state, row.key_version) == ("not_connected", 1)
+            assert "synthetic value" not in row.client_secret_sealed
+            opened = token_vault.open_sealed(row.client_secret_sealed, purpose=purpose)
+            assert opened == "synthetic value"
+    finally:
+        with Session(get_engine()) as session, session.begin():
+            row = session.get(GoogleConnection, 1)
+            if row is not None:
+                session.delete(row)
+    with Session(get_engine()) as session:
+        assert session.get(GoogleConnection, 1) is None

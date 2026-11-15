@@ -25,6 +25,9 @@ from app.guard.policy import decide_migration, decide_runtime
 
 LINEAGE = lineage_module.load()
 HEAD = LINEAGE.head
+# Revisions added after the 29 pinned ones, oldest first, and the id the next one would take.
+ADDED = LINEAGE.order[29:]
+NEXT = f"oss_{len(LINEAGE.order) + 1:04d}"
 SYSID = "7311234567890123456"
 INSTANCE = str(uuid.uuid4())
 # The stored, database-wide sentinel entry of a completely provisioned database.
@@ -137,8 +140,9 @@ class Lineage(unittest.TestCase):
     def test_pinned_lineage(self):
         # The pinned revisions come first, unchanged; revisions added since follow them.
         self.assertEqual(LINEAGE.order[:29], tuple(f"{n:04d}" for n in range(1, 30)))
-        self.assertEqual(LINEAGE.order[29:], ("oss_0030",))
-        self.assertEqual(LINEAGE.head, "oss_0030")
+        # Stated in full on purpose: a new revision has to be added here by hand.
+        self.assertEqual(ADDED, ("oss_0030", "oss_0031"))
+        self.assertEqual(LINEAGE.head, ADDED[-1])
         self.assertTrue(LINEAGE.crosses(None, "0029", "0029"))
         self.assertTrue(LINEAGE.crosses("0028", "0029", "0029"))
         self.assertFalse(LINEAGE.crosses("0029", "0029", "0029"))
@@ -163,9 +167,10 @@ class Lineage(unittest.TestCase):
         self.assertEqual(caught.exception.code, "NXG-L04")
 
         for name, revision, down in (
-            ("prv_0031_x.py", "prv_0031", HEAD),
-            ("0031_x.py", "0031", HEAD),
-            ("oss_0031_branch.py", "oss_0031", "0029"),
+            # The wrong prefix, no prefix, a branch off an older revision, a repeated id.
+            (f"prv_{NEXT[4:]}_x.py", f"prv_{NEXT[4:]}", HEAD),
+            (f"{NEXT[4:]}_x.py", NEXT[4:], HEAD),
+            (f"{NEXT}_branch.py", NEXT, "0029"),
             ("oss_0030_again.py", "oss_0030", "0028"),
         ):
             with self.subTest(revision=revision):
@@ -185,11 +190,11 @@ class Lineage(unittest.TestCase):
 
     def test_oss_descendant_extends_the_lineage(self):
         root = self.copy()
-        (root / "versions" / "oss_0031_example.py").write_text(
-            f'revision = "oss_0031"\ndown_revision = "{HEAD}"\n'
+        (root / "versions" / f"{NEXT}_example.py").write_text(
+            f'revision = "{NEXT}"\ndown_revision = "{HEAD}"\n'
         )
         extended = lineage_module.load(root)
-        self.assertEqual(extended.head, "oss_0031")
+        self.assertEqual(extended.head, NEXT)
         self.assertEqual(extended.order[:-1], LINEAGE.order)
         self.assertNotEqual(extended.digest, LINEAGE.digest)
 
@@ -335,7 +340,7 @@ class Migration(unittest.TestCase):
             (decision.mode, decision.from_revision, decision.target), ("INIT", None, HEAD)
         )
         self.assertEqual(decision.steps, LINEAGE.order)
-        self.assertEqual(len(decision.steps), 30)
+        self.assertEqual(len(decision.steps), 29 + len(ADDED))
         self.assertEqual(decision.data_changing_steps, ("0004", "0019", "0025", "0027", "0029"))
 
     def test_bootstrap_preconditions(self):
@@ -378,10 +383,10 @@ class Migration(unittest.TestCase):
     def test_upgrade_noop_and_grant_crossing(self):
         i = self.ident
         decision = decide_migration(initialized(i, "0027"), i, LINEAGE)
-        self.assertEqual((decision.mode, decision.steps), ("UPGRADE", ("0028", "0029", "oss_0030")))
-        # A database at the last pinned revision needs only the revision added since.
+        self.assertEqual((decision.mode, decision.steps), ("UPGRADE", ("0028", "0029", *ADDED)))
+        # A database at the last pinned revision needs only the revisions added since.
         decision = decide_migration(initialized(i, "0029"), i, LINEAGE)
-        self.assertEqual((decision.mode, decision.steps), ("UPGRADE", ("oss_0030",)))
+        self.assertEqual((decision.mode, decision.steps), ("UPGRADE", ADDED))
         self.assertEqual(decision.data_changing_steps, ())
         self.assertEqual(decide_migration(initialized(i), i, LINEAGE).mode, "NOOP")
         self.assertEqual(
@@ -409,7 +414,7 @@ class Migration(unittest.TestCase):
         )
         ci = identity("ci", role="migrator")
         down = decide_migration(initialized(ci), ci, LINEAGE, operation="downgrade", target="0027")
-        self.assertEqual((down.mode, down.steps), ("DOWNGRADE", ("oss_0030", "0029", "0028")))
+        self.assertEqual((down.mode, down.steps), ("DOWNGRADE", (*reversed(ADDED), "0029", "0028")))
         runtime = identity()
         self.assertEqual(code(decide_migration, empty(runtime), runtime, LINEAGE), "NXG-I04")
 

@@ -672,6 +672,56 @@ class CorrespondenceSyncSettings(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
+class GoogleConnection(Base):
+    """The one stored Google connection: the user's OAuth client and the grant made with it.
+
+    See docs/decisions/0003-google-connection.md, section 6. The two ``*_sealed`` columns
+    hold values sealed by ``app.token_vault`` and nothing else; the database refuses any
+    other form. No access token is stored.
+    """
+
+    __tablename__ = "google_connections"
+    __table_args__ = (
+        CheckConstraint("id = 1", name="single_google_connection"),
+        CheckConstraint("client_id <> ''", name="google_connection_client_id"),
+        CheckConstraint(
+            "state IN ('not_connected','connected','needs_reauthorization')",
+            name="google_connection_state",
+        ),
+        CheckConstraint("key_version >= 1", name="google_connection_key_version"),
+        CheckConstraint(
+            r"client_secret_sealed ~ '^v[0-9]+\.[A-Za-z0-9_-]+=*$'",
+            name="google_connection_client_secret_sealed",
+        ),
+        CheckConstraint(
+            r"refresh_token_sealed ~ '^v[0-9]+\.[A-Za-z0-9_-]+=*$'",
+            name="google_connection_refresh_token_sealed",
+        ),
+        CheckConstraint(
+            "(state = 'not_connected') = (refresh_token_sealed IS NULL)",
+            name="google_connection_grant",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=False)
+    client_id: Mapped[str] = mapped_column(String(255))
+    client_secret_sealed: Mapped[str] = mapped_column(Text)
+    refresh_token_sealed: Mapped[str | None] = mapped_column(Text)
+    # Which key sealed the two values above. There is one key and no rotation yet.
+    key_version: Mapped[int] = mapped_column(SmallInteger, default=1, server_default="1")
+    state: Mapped[str] = mapped_column(
+        String(30), default="not_connected", server_default="not_connected"
+    )
+    # What Google granted, which can be less than what was asked for.
+    granted_scopes: Mapped[list[str]] = mapped_column(
+        ARRAY(String(200)), default=list, server_default=text("'{}'::character varying[]")
+    )
+    account_address: Mapped[str | None] = mapped_column(String(320))
+    connected_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
 class FollowUpRule(Base):
     __tablename__ = "follow_up_rules"
     __table_args__ = (UniqueConstraint("rule_key", name="follow_up_rule_key_unique"),)
