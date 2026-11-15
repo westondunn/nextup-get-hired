@@ -9,13 +9,16 @@ UTC has no transitions; the same dates are used for it so that both zones see th
 """
 
 from datetime import UTC, date, datetime, timedelta
+from uuid import uuid4
 from zoneinfo import ZoneInfo
 
 import pytest
 from test_google_calendar import CONFIGURED, FakeCalendar, event_payload, fake_session
 
+from app.campaign import _message_out
+from app.contacts import _comm_out
 from app.correspondence_tasks import sync_calendar
-from app.models import CorrespondenceSyncSettings
+from app.models import Communication, CorrespondenceSyncSettings
 from app.sources import google_calendar as cal
 
 CHICAGO = ZoneInfo("America/Chicago")
@@ -494,3 +497,14 @@ def test_an_event_changed_between_all_day_and_timed_updates_the_flag():
     assert stored.received_at == utc(2027, 3, 14)
     result, _, _ = run_sync([all_day("e", "2027-03-14")], now, existing=[stored])
     assert result["updated"] == 1 and stored.all_day is True
+
+
+def test_the_flag_reaches_the_browser_through_both_message_serializers():
+    result, session, _ = run_sync(SPRING_EVENTS, utc(2027, 3, 13, 12))
+    rows = {row.source_id: row for row in session.added}
+    for serialize in (_comm_out, _message_out):
+        assert serialize(rows["day"])["all_day"] is True
+        assert serialize(rows["day"])["received_at"] == utc(2027, 3, 14)
+        assert serialize(rows["after"])["all_day"] is False
+    # A row that has never been given the flag, such as a hand-written note, reads as false.
+    assert _comm_out(Communication(id=uuid4(), subject="Synthetic note"))["all_day"] is False

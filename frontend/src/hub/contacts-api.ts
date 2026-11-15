@@ -79,6 +79,7 @@ export interface Communication {
   status: string;
   sent_at: string | null;
   received_at: string | null;
+  all_day?: boolean;
   notes: string;
   source: string;
   source_id: string | null;

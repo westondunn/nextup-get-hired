@@ -15,7 +15,13 @@ import {
   updateCommunication,
 } from './contacts-api';
 import { type Pursuit, closedStages, readWorkspace } from './career-api';
-import { ClassifierBadge, MessageBody, ReplyComposer, groupThreads } from './MessageCard';
+import {
+  ClassifierBadge,
+  MessageBody,
+  ReplyComposer,
+  groupThreads,
+  messageWhen,
+} from './MessageCard';
 import StageSuggestions from './StageSuggestions';
 
 const RELATIONSHIPS = [
@@ -433,9 +439,7 @@ export default function ContactsView() {
                     </span>
                     {m.sender || 'Unknown sender'} <ClassifierBadge message={m} />
                   </span>
-                  <span className="text-xs text-slate-400">
-                    {new Date(m.received_at || m.created_at).toLocaleString()}
-                  </span>
+                  <span className="text-xs text-slate-400">{messageWhen(m)}</span>
                 </div>
                 <p className="mt-1 text-sm font-medium text-slate-900">
                   {m.subject || '(no subject)'}

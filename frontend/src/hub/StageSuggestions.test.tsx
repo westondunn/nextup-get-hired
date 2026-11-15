@@ -54,3 +54,25 @@ it('renders nothing when there are no suggestions', async () => {
   await waitFor(() => expect(fetch).toHaveBeenCalled());
   expect(container.innerHTML).toBe('');
 });
+
+it('names an all-day calendar event by its date, with no time', async () => {
+  const allDay = {
+    ...suggestion,
+    communication: {
+      ...suggestion.communication,
+      source: 'calendar',
+      subject: 'Synthetic onsite',
+      received_at: '2027-03-14T00:00:00Z',
+      all_day: true,
+    },
+  };
+  vi.stubGlobal('fetch', vi.fn().mockResolvedValueOnce(new Response(JSON.stringify([allDay]))));
+  render(<StageSuggestions onChanged={vi.fn()} />);
+  // The date does not depend on the zone the test runs in.
+  const date = new Date(2027, 2, 14).toLocaleDateString();
+  expect(
+    await screen.findByText(
+      `Calendar event from Riley <riley@acme.example> · ${date}, all day · Synthetic onsite · matched “phone interview”`,
+    ),
+  ).toBeTruthy();
+});

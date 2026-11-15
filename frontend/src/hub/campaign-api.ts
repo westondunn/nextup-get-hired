@@ -48,6 +48,7 @@ export interface TaskMessage {
   subject: string;
   body: string;
   received_at: string | null;
+  all_day?: boolean;
   contact_id: string | null;
   pursuit_id: string | null;
 }

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { type StageSuggestion, decideStageSuggestion, readStageSuggestions } from './contacts-api';
-import { MessageBody } from './MessageCard';
+import { MessageBody, messageWhen } from './MessageCard';
 
 /** Why a message suggests a stage, in the user's terms. */
 export function suggestionSummary(s: StageSuggestion): string {
@@ -77,9 +77,7 @@ export default function StageSuggestions({ onChanged }: { onChanged?: () => void
               <p className="text-sm font-medium text-slate-900">{suggestionSummary(s)}</p>
               <p className="mt-0.5 text-xs text-slate-600">
                 {m.source === 'calendar' ? 'Calendar event' : 'Email'} from{' '}
-                {m.sender || 'unknown sender'} ·{' '}
-                {new Date(m.received_at || m.created_at).toLocaleString()} ·{' '}
-                {m.subject || '(no subject)'}
+                {m.sender || 'unknown sender'} · {messageWhen(m)} · {m.subject || '(no subject)'}
                 {s.evidence ? ` · matched “${s.evidence}”` : ''}
               </p>
               {shown && <MessageBody body={m.body} />}

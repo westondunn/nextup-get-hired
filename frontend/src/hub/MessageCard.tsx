@@ -11,6 +11,8 @@ export interface ImportedMessage {
   subject: string;
   body: string;
   received_at: string | null;
+  /** An all-day calendar event: `received_at` is midnight UTC of its date, not an instant. */
+  all_day?: boolean;
   sent_at?: string | null;
   created_at?: string;
   contact_id?: string | null;
@@ -65,9 +67,38 @@ export function sourceLabel(source: string): string {
   return source === 'calendar' ? 'calendar' : source === 'gmail' ? 'email' : source;
 }
 
+type Timed = Pick<ImportedMessage, 'received_at' | 'all_day' | 'sent_at' | 'created_at'>;
+
+/**
+ * The calendar date of an all-day event, as local midnight in the viewer's own zone.
+ * The stored value is midnight UTC of that date, so the date is read in UTC. Reading it in
+ * the viewer's zone would move it to the evening before anywhere west of UTC.
+ */
+function allDayDate(m: Timed): Date | null {
+  if (!m.all_day || !m.received_at) return null;
+  const stored = new Date(m.received_at);
+  return new Date(stored.getUTCFullYear(), stored.getUTCMonth(), stored.getUTCDate());
+}
+
+/** Where a message sorts. An all-day event sorts at the start of its day in the viewer's zone. */
 export function messageTime(m: ImportedMessage): number {
+  const day = allDayDate(m);
+  if (day) return day.getTime();
   const stamp = m.received_at ?? m.sent_at ?? m.created_at;
   return stamp ? new Date(stamp).getTime() : 0;
+}
+
+/**
+ * When a message arrived or an event starts, as text for the viewer. An all-day event has a
+ * date and no time. Anything else is shown in the viewer's zone; `dateOnly` drops the time.
+ */
+export function messageWhen(m: Timed, dateOnly = false): string {
+  const day = allDayDate(m);
+  if (day) return `${day.toLocaleDateString()}, all day`;
+  const stamp = m.received_at || m.created_at;
+  if (!stamp) return '';
+  const moment = new Date(stamp);
+  return dateOnly ? moment.toLocaleDateString() : moment.toLocaleString();
 }
 
 /**
@@ -254,7 +285,7 @@ export default function MessageCard({
   reply?: ReplyOptions;
 }) {
   const [replying, setReplying] = useState(false);
-  const when = message.received_at ? new Date(message.received_at).toLocaleString() : '';
+  const when = message.received_at ? messageWhen(message) : '';
   const outbound = message.direction === 'outbound';
   return (
     <div

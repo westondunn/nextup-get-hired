@@ -136,6 +136,7 @@ def _message_out(c: Communication | None) -> dict | None:
         "subject": c.subject,
         "body": c.body,
         "received_at": c.received_at,
+        "all_day": bool(c.all_day),
         "contact_id": c.contact_id,
         "pursuit_id": c.pursuit_id,
     }

@@ -24,7 +24,7 @@ import {
 import { type ResumeVersion, readResumes } from './evidence-api';
 import StageSuggestions from './StageSuggestions';
 import { type Communication, readCommunications, undoApplicationFromMail } from './contacts-api';
-import { ThreadCard, groupThreads } from './MessageCard';
+import { ThreadCard, groupThreads, messageWhen } from './MessageCard';
 
 /* ---------- Structured Data Panels ---------- */
 
@@ -452,10 +452,7 @@ function PursuitEditor({ item, refresh }: { item: Pursuit; refresh: () => Promis
               {detectedFrom && (
                 <>
                   <span>
-                    {detectedFrom.subject || '(no subject)'} ·{' '}
-                    {new Date(
-                      detectedFrom.received_at || detectedFrom.created_at,
-                    ).toLocaleDateString()}
+                    {detectedFrom.subject || '(no subject)'} · {messageWhen(detectedFrom, true)}
                   </span>
                   <button
                     type="button"
