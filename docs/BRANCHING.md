@@ -180,7 +180,7 @@ NEXTUP_INTEGRATION_APPROVED=1 scripts/verify.sh
 
 Run it only with deliberate approval in the intended disposable test environment, following `docs/DEVELOPMENT.md`. The harness is not a way to test against a personal or staging database. The development notes require non-root execution and describe Docker prerequisites. This guide does not modify or bypass that process. [Verification wrapper][repo-verify]; [development notes][repo-development]
 
-The checked-in CI workflow is named `Nextup CI`, with job ID `verify`. It runs `scripts/verify_ci.py` on every push and pull request and retains test evidence. Hosted runs have passed on `main` (for example [this run](https://github.com/westondunn/nextup-get-hired/actions/runs/43538353763) at `7370e9a`, 2026-11-13). A passing run on `main` says nothing about a branch: each pull request needs its own result, and a push to a branch with an open pull request produces two runs of the same check. [CI workflow][repo-ci]
+The checked-in CI workflow is named `Nextup CI`, with job ID `verify`. It runs `scripts/verify_ci.py` for every pull request and every push to `main`, and retains test evidence. Hosted runs have passed on `main` (for example [this run](https://github.com/westondunn/nextup-get-hired/actions/runs/43538353763) at `7370e9a`, 2026-11-13). A passing run on `main` says nothing about a branch: each pull request needs its own result, and a branch with no pull request gets no hosted run. The trigger was narrowed after the commit the link is pinned to, so the linked file still shows a run for every push. [CI workflow][repo-ci]
 
 ## 6. Existing protection versus proposed enforcement
 
@@ -193,7 +193,7 @@ The repository API was inspected on November 13, 2026, and inspected again later
 | Linear history | Required. | Use squash merging as the default. |
 | Deletion and force pushes | Deletion and non-fast-forward protections are present. | Retain both. |
 | Bypass | A role-based bypass is configured in `always` mode. | Review and narrow it where practical; document exceptional use rather than treating it as routine. |
-| Required checks | No `required_status_checks` rule appears in the inspected ruleset. The hosted workflow emits a check named `verify`, twice for a push to a pull-request branch. | Decide whether pushes to topic branches should still trigger the workflow, then require the exact emitted name and expected source app. Any change to the trigger goes through a `ci/` branch. |
+| Required checks | No `required_status_checks` rule appears in the inspected ruleset. The hosted workflow emits a check named `verify`, once for each commit pushed to a pull request. | Require the exact emitted name and expected source app, once the maintainer approves the ruleset change. Any change to the trigger goes through a `ci/` branch. |
 | Review conversations | Resolution is not required by the inspected ruleset. | Consider enabling required conversation resolution. |
 | Branch naming | Not enforced by the inspected ruleset or `ci.yml`. | Adopt the policy first, then introduce and validate the check below. |
 
@@ -298,6 +298,8 @@ Repository evidence reviewed includes `README.md`, `SECURITY.md`, `docs/DEVELOPM
 Document checks: The embedded validator was executed locally against 60 named positive/negative cases (28 accepted; 32 rejected), plus a missing-variable case. All matched the expected outcomes. Every accepted name also passed `git check-ref-format --branch`. Four representative cases passed through the exact workflow shell snippet, including the 80/81-character boundary. YAML parsing, Python syntax, shell syntax, Markdown structure, and source-reference resolution were checked. These are document/example checks, not NextUp application test results.
 
 Update, 2026-11-13, commit `71011e7`: the source-file links were re-pinned to that commit, the ruleset was read again and found unchanged, and the statements about hosted CI were corrected from run history. Thirteen pull requests were merged with this workflow by that commit; two of them showed that a closing keyword next to an issue number closes the issue even in a negated sentence, which section 4 now states. The embedded naming validator was not re-run for this update.
+
+Update, 2026-11-14: the workflow's push trigger was narrowed from every branch to `main`, so a commit pushed to a pull request is verified once instead of twice. The ruleset was not changed, and `verify` is still not a required check.
 
 Not performed: application runtime tests, the full disposable-stack verification, hosted execution of the proposed naming workflow, or end-to-end ruleset enforcement testing. No branches, pull requests, repository files, or GitHub settings were changed by generating this document. Owner-reported local enhancements are not treated as verified public integrations.
 

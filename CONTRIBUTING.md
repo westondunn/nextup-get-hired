@@ -34,7 +34,7 @@ What the guide does not cover:
 
 - The pull-request template asks for the commands actually run and, separately, for the checks that were not run, with reasons. Report both as they happened. A check that was skipped is listed as skipped.
 - Reference an issue as "Part of #N" unless merging the pull request should close it. The reason is in the guide under [Review, verify, and merge](docs/BRANCHING.md#review-verify-and-merge).
-- The hosted workflow runs the full verification for every push and pull request, as a check named `verify`. The `main` ruleset does not require it to pass, so read its result before a merge.
+- The hosted workflow runs the full verification for every pull request and every push to `main`, as a check named `verify`. A branch with no pull request gets no hosted run. The `main` ruleset does not require it to pass, so read its result before a merge.
 
 ## Setting up
 
