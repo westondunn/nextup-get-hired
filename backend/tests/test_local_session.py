@@ -304,6 +304,8 @@ def test_the_application_serves_the_session_routes(monkeypatch, redis):
 PROTECTED = [
     ("PUT", "/api/correspondence"),
     ("POST", "/api/correspondence/sync"),
+    ("GET", "/api/google/connection"),
+    ("PUT", "/api/google/client"),
 ]
 
 
@@ -344,10 +346,12 @@ def test_protected_routes_refuse_without_a_session_before_anything_else(
 def test_protected_routes_are_reached_with_a_session(app_client, monkeypatch, method, path):
     client, _ = app_client
     monkeypatch.setattr("app.correspondence.get_settings", lambda: Settings())
+    monkeypatch.setattr("app.google_connection.get_settings", lambda: Settings())
     assert start(client).status_code == 204
     response = client.request(method, path, json={"enabled": "not-a-boolean"})
-    # Past the session check: the route's own validation or state answers instead.
-    assert response.status_code in (409, 422)
+    # Past the session check: the route's own validation or state answers instead. A
+    # route that only reports has nothing to refuse.
+    assert response.status_code in ((200,) if method == "GET" else (409, 422))
 
 
 @pytest.mark.parametrize("method,path", PROTECTED)

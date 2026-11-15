@@ -21,6 +21,7 @@ from app.db import get_session
 from app.discovery_api import router as discovery_router
 from app.evidence import router as evidence_router
 from app.follow_up_rules import router as follow_up_router
+from app.google_connection import router as google_connection_router
 from app.health import probe_health
 from app.job_ratings import router as job_ratings_router
 from app.jobs import router as jobs_router
@@ -63,6 +64,7 @@ app.include_router(follow_up_router)
 app.include_router(correspondence_router)
 app.include_router(seed_router)
 app.include_router(session_router)
+app.include_router(google_connection_router)
 logger = logging.getLogger(__name__)
 Database = Annotated[Session, Depends(get_session)]
 

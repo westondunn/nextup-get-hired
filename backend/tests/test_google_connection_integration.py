@@ -1,4 +1,7 @@
-"""The stored Google connection, written and read by the runtime role through the model."""
+"""The stored Google connection, written and read by the runtime role.
+
+First through the model, then through the routes that save and report the user's client.
+"""
 
 import os
 
@@ -7,10 +10,12 @@ from pydantic import SecretStr
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError, OperationalError
 from sqlalchemy.orm import Session
+from test_profile_integration import profile_client as profile_client
 from test_profile_integration import profile_database as profile_database
 
-from app import token_vault
+from app import google_connection, token_vault
 from app.config import Settings
+from app.google_connection import CLIENT_IN_USE, CLIENT_SECRET_PURPOSE, REFRESH_TOKEN_PURPOSE
 from app.models import GoogleConnection
 
 pytestmark = pytest.mark.skipif(
@@ -106,3 +111,138 @@ def test_a_change_to_the_connection_holds_the_row_lock(profile_database):
                 second.scalar(locked)
     with Session(engine) as session, session.begin():
         assert session.scalar(locked) is not None
+
+
+# ---------- the routes, with the runtime role and a real table ----------
+
+CLIENT_ID = "123456789012-synthetic0client.apps.googleusercontent.com"
+OTHER_CLIENT_ID = "123456789012-another0client.apps.googleusercontent.com"
+ENABLED = Settings(calendar_sync_enabled=True, token_key=KEY.token_key)
+
+
+@pytest.fixture
+def google_client(profile_client, local_session, monkeypatch):
+    monkeypatch.setattr(google_connection, "get_settings", lambda: ENABLED)
+    return profile_client
+
+
+def row_of(engine):
+    with Session(engine) as session:
+        row = session.get(GoogleConnection, 1)
+        if row is not None:
+            session.expunge(row)
+        return row
+
+
+def test_saving_a_client_stores_the_secret_sealed_and_reports_no_secret(
+    google_client, profile_database
+):
+    engine, _ = profile_database
+    report = google_client.get("/api/google/connection").json()
+    assert (report["state"], report["client_configured"]) == ("not_configured", False)
+
+    response = google_client.put(
+        "/api/google/client", json={"client_id": CLIENT_ID, "client_secret": CLIENT_SECRET}
+    )
+    assert response.status_code == 200 and CLIENT_SECRET not in response.text
+    assert response.json() == google_client.get("/api/google/connection").json()
+    assert response.json() == {
+        "available": True,
+        "unavailable_reason": None,
+        "client_configured": True,
+        "client_id": CLIENT_ID,
+        "state": "not_connected",
+    }
+    row = row_of(engine)
+    assert (row.client_id, row.state, row.key_version) == (CLIENT_ID, "not_connected", 1)
+    assert row.refresh_token_sealed is None and CLIENT_SECRET not in row.client_secret_sealed
+    opened = token_vault.open_sealed(
+        row.client_secret_sealed, purpose=CLIENT_SECRET_PURPOSE, settings=ENABLED
+    )
+    assert opened == CLIENT_SECRET
+
+    # Until an account is connected the client can be replaced, and there is still one row.
+    response = google_client.put(
+        "/api/google/client", json={"client_id": OTHER_CLIENT_ID, "client_secret": "another"}
+    )
+    assert response.status_code == 200 and response.json()["client_id"] == OTHER_CLIENT_ID
+    replaced = row_of(engine)
+    assert replaced.client_id == OTHER_CLIENT_ID and replaced.updated_at >= row.updated_at
+    opened = token_vault.open_sealed(
+        replaced.client_secret_sealed, purpose=CLIENT_SECRET_PURPOSE, settings=ENABLED
+    )
+    assert opened == "another"
+    with Session(engine) as session:
+        assert len(session.scalars(select(GoogleConnection)).all()) == 1
+
+
+def test_a_connected_client_keeps_its_grant_and_cannot_be_swapped(google_client, profile_database):
+    engine, _ = profile_database
+    saved = google_client.put(
+        "/api/google/client", json={"client_id": CLIENT_ID, "client_secret": CLIENT_SECRET}
+    )
+    assert saved.status_code == 200
+    # No route stores a grant yet, so one is placed here as the consent flow will.
+    token = token_vault.seal(REFRESH_TOKEN, purpose=REFRESH_TOKEN_PURPOSE, settings=ENABLED)
+    with Session(engine) as session, session.begin():
+        row = session.get(GoogleConnection, 1, with_for_update=True)
+        row.state, row.refresh_token_sealed, row.granted_scopes = "connected", token, [SCOPE]
+    before = row_of(engine)
+
+    refused = google_client.put(
+        "/api/google/client", json={"client_id": OTHER_CLIENT_ID, "client_secret": "another"}
+    )
+    assert (refused.status_code, refused.json()) == (409, {"detail": CLIENT_IN_USE})
+    unchanged = row_of(engine)
+    assert (unchanged.client_id, unchanged.client_secret_sealed, unchanged.updated_at) == (
+        before.client_id,
+        before.client_secret_sealed,
+        before.updated_at,
+    )
+
+    # A new secret for the same client replaces the secret and nothing else.
+    rotated = google_client.put(
+        "/api/google/client", json={"client_id": CLIENT_ID, "client_secret": "rotated-secret"}
+    )
+    assert rotated.status_code == 200 and rotated.json()["state"] == "connected"
+    after = row_of(engine)
+    assert (after.state, after.refresh_token_sealed, after.granted_scopes) == (
+        "connected",
+        token,
+        [SCOPE],
+    )
+    opened = token_vault.open_sealed(
+        after.client_secret_sealed, purpose=CLIENT_SECRET_PURPOSE, settings=ENABLED
+    )
+    assert opened == "rotated-secret"
+
+
+def test_a_replaced_key_makes_the_stored_client_unreadable(
+    google_client, profile_database, monkeypatch
+):
+    saved = google_client.put(
+        "/api/google/client", json={"client_id": CLIENT_ID, "client_secret": CLIENT_SECRET}
+    )
+    assert saved.json()["state"] == "not_connected"
+    replaced = Settings(
+        calendar_sync_enabled=True,
+        token_key=SecretStr("integration-test-only-replaced-key-0123456789ab"),
+    )
+    monkeypatch.setattr(google_connection, "get_settings", lambda: replaced)
+    report = google_client.get("/api/google/connection").json()
+    assert (report["state"], report["client_id"]) == ("unreadable", CLIENT_ID)
+    # Saving the client again, with the key now in place, makes it readable.
+    again = google_client.put(
+        "/api/google/client", json={"client_id": CLIENT_ID, "client_secret": CLIENT_SECRET}
+    )
+    assert again.json()["state"] == "not_connected"
+
+
+def test_nothing_is_stored_while_sync_is_switched_off(google_client, profile_database, monkeypatch):
+    engine, _ = profile_database
+    monkeypatch.setattr(google_connection, "get_settings", lambda: Settings())
+    refused = google_client.put(
+        "/api/google/client", json={"client_id": CLIENT_ID, "client_secret": CLIENT_SECRET}
+    )
+    assert refused.status_code == 409 and CLIENT_SECRET not in refused.text
+    assert row_of(engine) is None
