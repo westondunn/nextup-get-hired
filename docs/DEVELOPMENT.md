@@ -10,7 +10,8 @@ NextUp is pre-release. This page describes the tooling that exists in the reposi
 | The same on macOS or Windows | Not tested |
 | The hosted workflow in `.github/workflows/ci.yml` | Runs the same verification on a hosted `ubuntu-24.04` runner for every push and pull request. Passing on `main` on 2026-11-13, for example [this run](https://github.com/westondunn/nextup-get-hired/actions/runs/43538353763) at commit `7370e9a`. Current results are on the [Actions page](https://github.com/westondunn/nextup-get-hired/actions/workflows/ci.yml?query=branch%3Amain) |
 | The local development launcher (`scripts/local.py`) | Covered by unit tests; not yet validated on a clean machine |
-| Display of dates in the Search Plan view outside UTC | Not tested |
+| Display of dates in the Search Plan view outside UTC | Unit-tested in UTC and America/Chicago across the 2027-03-14 and 2026-11-01 clock changes (`frontend/src/hub/SearchPlanView.dst.test.tsx`), in [this hosted run](https://github.com/westondunn/nextup-get-hired/actions/runs/43654485058) at commit `325cc46`. No zone east of UTC is tested, and there is no browser test. Known defect: an all-day calendar event is shown on the previous day west of UTC ([#38](https://github.com/westondunn/nextup-get-hired/issues/38)) |
+| Calendar import across daylight-saving changes | Unit-tested with synthetic events in the same run (`backend/tests/test_calendar_dst.py`). Known defect: an event time without an offset is read as UTC ([#39](https://github.com/westondunn/nextup-get-hired/issues/39)). No live calendar has been used |
 
 ## Requirements
 
