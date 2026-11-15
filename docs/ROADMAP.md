@@ -2,7 +2,7 @@
 
 This page lists the planned outcomes. P0 and P1 are in order; the section added after them is not yet placed. It is public planning for a pre-release project. Outside contributions are not being accepted yet (see [CONTRIBUTING.md](../CONTRIBUTING.md)), so nothing here is an invitation to start work.
 
-**Snapshot date: 2026-11-14, last reconciled at commit `325cc46`.** Status, scope and acceptance criteria live in the linked issues; where this page and an issue disagree, the issue is right. The parent tracking issue is [#3](https://github.com/westondunn/nextup-get-hired/issues/3). There is no GitHub Project for this repository.
+**Snapshot date: 2026-11-14, last reconciled at commit `be66581`.** Status, scope and acceptance criteria live in the linked issues; where this page and an issue disagree, the issue is right. The parent tracking issue is [#3](https://github.com/westondunn/nextup-get-hired/issues/3). There is no GitHub Project for this repository.
 
 An outcome is checked only when its completion gate is met and the evidence is linked. A branch, an open pull request or a closed issue does not check it. Readiness gates for a public release are in the [release checklist](RELEASE_CHECKLIST.md).
 
@@ -119,7 +119,7 @@ This remains the first connection to be completed and validated. It is not suppo
   - Contributor notes: `backend/tests/test_calendar_dst.py`, `frontend/src/hub/SearchPlanView.dst.test.tsx`; synthetic fixtures only
   - Contribution availability: candidate once contributions open; maintainer-only until then
   - Complete when: UTC and America/Chicago transition cases run in the documented verification
-  - Evidence: merged in [#40](https://github.com/westondunn/nextup-get-hired/pull/40) as `325cc46`; [hosted CI run on `main`](https://github.com/westondunn/nextup-get-hired/actions/runs/43654485058), which ran the new cases. The tests found two defects, tracked below and held in the suite as expected failures. This outcome is that the behavior is tested, not that it is correct
+  - Evidence: merged in [#40](https://github.com/westondunn/nextup-get-hired/pull/40) as `325cc46`; [hosted CI run on `main`](https://github.com/westondunn/nextup-get-hired/actions/runs/43654485058), which ran the new cases. The tests found two defects, tracked below; each was held in the suite as an expected failure until corrected. This outcome is that the behavior is tested, not that it is correct
 
 - [ ] **Outcome: an all-day calendar event is shown on its own date in every time zone**
   - Tracking: [#38](https://github.com/westondunn/nextup-get-hired/issues/38)
@@ -130,14 +130,14 @@ This remains the first connection to be completed and validated. It is not suppo
   - Complete when: the expected-failure cases for all-day events pass in UTC and America/Chicago and their markers are removed
   - Evidence: pending
 
-- [ ] **Outcome: a calendar event time without an offset is read in the time zone the event names**
+- [x] **Outcome: a calendar event time without an offset is read in the time zone the event names**
   - Tracking: [#39](https://github.com/westondunn/nextup-get-hired/issues/39)
   - Priority and dependencies: not placed; found by [#13](https://github.com/westondunn/nextup-get-hired/issues/13)
-  - Suggested branch: `bugfix/39-calendar-event-time-zone`
+  - Suggested branch: `bugfix/39-calendar-event-time-zone` (used as suggested)
   - Contributor notes: `backend/app/sources/google_calendar.py`; whether the provider ever returns this form is not verified
   - Contribution availability: maintainer-only
   - Complete when: the expected-failure cases pass and their marker is removed
-  - Evidence: pending
+  - Evidence: merged in [#42](https://github.com/westondunn/nextup-get-hired/pull/42) as `be66581`; [hosted CI run on `main`](https://github.com/westondunn/nextup-get-hired/actions/runs/43658531564), in which the backend suite has no expected failure left. A repeated or skipped wall-clock time follows RFC 5545, and an event whose start names an unknown zone is left out of the import. Not verified against a live calendar
 
 - [ ] **Outcome: the Google setup is validated from a clean machine**
   - Tracking: [#14](https://github.com/westondunn/nextup-get-hired/issues/14)
