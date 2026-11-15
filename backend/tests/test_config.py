@@ -445,6 +445,9 @@ class Integrations(Refusals):
                 handle.write(SENTINEL)
             os.chmod(secret, 0o600)
             self.refused("NXG-C09", {**staging, "NEXTUP_ADZUNA_APP_KEY_FILE": secret})
+            # The key that encrypts stored connection credentials is refused with them.
+            refusal = self.refused("NXG-C09", {**staging, "NEXTUP_TOKEN_KEY_FILE": secret})
+            self.assertEqual(refusal.keys, ("NEXTUP_TOKEN_KEY_FILE",))
         finally:
             for name in os.listdir(root):
                 os.unlink(os.path.join(root, name))

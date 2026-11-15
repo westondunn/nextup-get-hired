@@ -142,10 +142,12 @@ services:
   api:
     <<: *runtime
     # Only the api verifies the local-session setup code, so only it receives the file.
+    # The api and the worker read the key that encrypts stored connection credentials.
     environment:
       <<: *runtime-env
       NEXTUP_SETUP_CODE_FILE: /run/secrets/setup_code
-    secrets: [db_app_password, setup_code]
+      NEXTUP_TOKEN_KEY_FILE: /run/secrets/token_key
+    secrets: [db_app_password, setup_code, token_key]
     networks: [backend, edge]
     ports: ['127.0.0.1:0:8000']
     healthcheck:
@@ -155,6 +157,10 @@ services:
       retries: 30
   worker:
     <<: *runtime
+    environment:
+      <<: *runtime-env
+      NEXTUP_TOKEN_KEY_FILE: /run/secrets/token_key
+    secrets: [db_app_password, token_key]
     command: [celery, -A, app.celery_app:celery_app, worker, --loglevel=INFO, --concurrency=1, --hostname=worker@%h]
     healthcheck:
       test: [CMD-SHELL, 'celery -A app.celery_app:celery_app inspect ping --destination "worker@$${HOSTNAME}" --timeout 3']
@@ -208,6 +214,8 @@ secrets:
     file: ${NEXTUP_CI_SECRETS_DIR:?Run python3 scripts/verify_ci.py}/migration_key
   setup_code:
     file: ${NEXTUP_CI_SECRETS_DIR:?Run python3 scripts/verify_ci.py}/setup_code
+  token_key:
+    file: ${NEXTUP_CI_SECRETS_DIR:?Run python3 scripts/verify_ci.py}/token_key
 
 networks:
   backend:

@@ -50,14 +50,20 @@ services:
   api:
     <<: *dev-runtime
     # Only the api verifies the local-session setup code, so only it receives the file.
+    # The api and the worker read the key that encrypts stored connection credentials.
     environment:
       <<: *dev-runtime-env
       NEXTUP_SETUP_CODE_FILE: /run/secrets/setup_code
-    secrets: [db_app_password, setup_code]
+      NEXTUP_TOKEN_KEY_FILE: /run/secrets/token_key
+    secrets: [db_app_password, setup_code, token_key]
     ports:
       - 127.0.0.1:${NEXTUP_DEV_API_PORT:-18000}:8000
   worker:
     <<: *dev-runtime
+    environment:
+      <<: *dev-runtime-env
+      NEXTUP_TOKEN_KEY_FILE: /run/secrets/token_key
+    secrets: [db_app_password, token_key]
   scheduler:
     <<: *dev-runtime
   frontend:
@@ -92,6 +98,8 @@ secrets:
     file: ./.secrets/dev/migration_key
   setup_code:
     file: ./.secrets/dev/setup_code
+  token_key:
+    file: ./.secrets/dev/token_key
 
 volumes:
   postgres-data:
