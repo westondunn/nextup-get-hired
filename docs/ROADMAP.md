@@ -2,7 +2,7 @@
 
 This page lists the planned outcomes. P0 and P1 are in order; the section added after them is not yet placed. It is public planning for a pre-release project. Outside contributions are not being accepted yet (see [CONTRIBUTING.md](../CONTRIBUTING.md)), so nothing here is an invitation to start work.
 
-**Snapshot date: 2026-11-14, last reconciled at commit `91aa6c7`.** Status, scope and acceptance criteria live in the linked issues; where this page and an issue disagree, the issue is right. The parent tracking issue is [#3](https://github.com/westondunn/nextup-get-hired/issues/3). There is no GitHub Project for this repository.
+**Snapshot date: 2026-11-14, last reconciled at commit `c143b87`.** Status, scope and acceptance criteria live in the linked issues; where this page and an issue disagree, the issue is right. The parent tracking issue is [#3](https://github.com/westondunn/nextup-get-hired/issues/3). There is no GitHub Project for this repository.
 
 An outcome is checked only when its completion gate is met and the evidence is linked. A branch, an open pull request or a closed issue does not check it. Readiness gates for a public release are in the [release checklist](RELEASE_CHECKLIST.md).
 
@@ -121,14 +121,14 @@ This remains the first connection to be completed and validated. It is not suppo
   - Complete when: UTC and America/Chicago transition cases run in the documented verification
   - Evidence: merged in [#40](https://github.com/westondunn/nextup-get-hired/pull/40) as `325cc46`; [hosted CI run on `main`](https://github.com/westondunn/nextup-get-hired/actions/runs/43654485058), which ran the new cases. The tests found two defects, tracked below; each was held in the suite as an expected failure until corrected. This outcome is that the behavior is tested, not that it is correct
 
-- [ ] **Outcome: an all-day calendar event is shown on its own date in every time zone**
+- [x] **Outcome: an all-day calendar event is shown on its own date in every time zone**
   - Tracking: [#38](https://github.com/westondunn/nextup-get-hired/issues/38)
   - Priority and dependencies: not placed; found by [#13](https://github.com/westondunn/nextup-get-hired/issues/13)
-  - Suggested branch: `bugfix/38-all-day-event-date`
-  - Contributor notes: `backend/app/correspondence_tasks.py`, `frontend/src/hub/MessageCard.tsx`; how the date is carried is undecided, and a stored flag would need a new migration revision
+  - Suggested branch: `bugfix/38-all-day-event-date` (used for the stored flag; the display change used `bugfix/38-all-day-event-display`)
+  - Contributor notes: `backend/app/correspondence_tasks.py`, `frontend/src/hub/MessageCard.tsx`; the date is carried by a stored flag, added by migration `oss_0030`, the first revision after the pinned history
   - Contribution availability: maintainer-only
   - Complete when: the expected-failure cases for all-day events pass in UTC and America/Chicago and their markers are removed
-  - Evidence: pending
+  - Evidence: the stored flag merged in [#48](https://github.com/westondunn/nextup-get-hired/pull/48) as `b3ece31` and the display change in [#49](https://github.com/westondunn/nextup-get-hired/pull/49) as `c143b87`; [hosted CI run on `main`](https://github.com/westondunn/nextup-get-hired/actions/runs/43672928458), in which the frontend suite has no expected failure left and the migration ran through the guard. Events imported before the flag existed and now outside the sync window are not corrected. Tested at component level, with no browser test and no live calendar
 
 - [x] **Outcome: a calendar event time without an offset is read in the time zone the event names**
   - Tracking: [#39](https://github.com/westondunn/nextup-get-hired/issues/39)
