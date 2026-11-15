@@ -1,7 +1,7 @@
 import { fireEvent, render, screen, within } from '@testing-library/react';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Campaign, CampaignTask, TaskMessage } from './campaign-api';
-import MessageCard from './MessageCard';
+import MessageCard, { groupThreads, messageTime, messageWhen } from './MessageCard';
 import SearchPlanView from './SearchPlanView';
 
 // Dates and times in the Search Plan view across daylight-saving changes, in UTC and in
@@ -321,17 +321,84 @@ describe.each<Zone>(['UTC', 'America/Chicago'])('Search Plan dates in %s', (zone
     expect(screen.getByText(shown)).toBeTruthy();
   });
 
-  // An all-day event is stored at midnight UTC of its date. West of UTC that instant falls on
-  // the evening before, so the card names the wrong day. Recorded as a defect; the expectation
-  // below is the correct one and is marked as failing only where it fails today.
-  // Defect: https://github.com/westondunn/nextup-get-hired/issues/38
-  const allDay = chicago ? it.fails : it;
-  allDay.each([
+  // An all-day event is stored at midnight UTC of its date, with a flag. West of UTC that
+  // instant falls on the evening before, so the date is read from the flag and never
+  // converted to the viewer's zone.
+  const allDayEvents: [string, string, number, number, number][] = [
     ['the spring transition day', '2027-03-14T00:00:00Z', 2027, 3, 14],
     ['the autumn transition day', '2026-11-01T00:00:00Z', 2026, 11, 1],
-  ])('shows an all-day event on %s on its own date', (_, stored, year, month, day) => {
-    render(<MessageCard message={calendarEvent(stored, 'When: all day')} />);
-    const date = new Date(year, month - 1, day).toLocaleDateString();
-    expect(screen.getByText((text) => text.startsWith(date))).toBeTruthy();
+    ['an ordinary winter day', '2027-01-15T00:00:00Z', 2027, 1, 15],
+    ['the last day of a year', '2026-12-31T00:00:00Z', 2026, 12, 31],
+  ];
+
+  it.each(allDayEvents)(
+    'shows an all-day event on %s on its own date, with no time',
+    (_, stored, year, month, day) => {
+      render(
+        <MessageCard message={{ ...calendarEvent(stored, 'When: all day'), all_day: true }} />,
+      );
+      const date = new Date(year, month - 1, day).toLocaleDateString();
+      expect(screen.getByText(`${date}, all day`)).toBeTruthy();
+      expect(screen.queryByText(/\d:\d\d/)).toBeNull();
+    },
+  );
+
+  it('still shows an event that really starts at midnight UTC as a time', () => {
+    // The same stored instant without the flag is an ordinary timed event.
+    render(<MessageCard message={calendarEvent('2027-03-14T00:00:00Z')} />);
+    const shown = chicago ? wallClock(2027, 3, 13, 18, 0) : wallClock(2027, 3, 14, 0, 0);
+    expect(screen.getByText(shown)).toBeTruthy();
+    expect(screen.queryByText(/all day/)).toBeNull();
+  });
+
+  it('shows the all-day date on the task that carries the event', async () => {
+    const event = { ...calendarEvent('2027-03-14T00:00:00Z', 'When: all day'), all_day: true };
+    await renderPlan(
+      SPRING,
+      [task('2027-03-14', { communication: event })],
+      '2027-03-14T12:00:00Z',
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Edit' }));
+    const date = new Date(2027, 2, 14).toLocaleDateString();
+    expect(screen.getByText(`${date}, all day`)).toBeTruthy();
+  });
+
+  it('writes the date of an all-day event the same way wherever a message time appears', () => {
+    const event = { ...calendarEvent('2026-11-01T00:00:00Z'), all_day: true };
+    const date = new Date(2026, 10, 1).toLocaleDateString();
+    expect(messageWhen(event)).toBe(`${date}, all day`);
+    expect(messageWhen(event, true)).toBe(`${date}, all day`);
+    // Without a stored time the flag means nothing, and the creation time is used.
+    const undated = { received_at: null, all_day: true, created_at: '2026-11-01T12:00:00Z' };
+    expect(messageWhen(undated)).toBe(new Date('2026-11-01T12:00:00Z').toLocaleString());
+    expect(messageWhen({ received_at: null })).toBe('');
+    // A timed message keeps its local time, or its local date when only the date is wanted.
+    const timed = calendarEvent('2026-11-01T06:30:00Z');
+    expect(messageWhen(timed)).toBe(new Date('2026-11-01T06:30:00Z').toLocaleString());
+    expect(messageWhen(timed, true)).toBe(new Date('2026-11-01T06:30:00Z').toLocaleDateString());
+  });
+
+  it('sorts an all-day event at the start of its own day in the viewer\u2019s zone', () => {
+    const at = (id: string, received_at: string, all_day = false) => ({
+      ...calendarEvent(received_at),
+      id,
+      thread_id: null,
+      all_day,
+    });
+    // 19:00 local on the 13th, the all-day event of the 14th, and 09:00 local on the 14th.
+    const eveningBefore = chicago ? '2027-03-14T01:00:00Z' : '2027-03-13T19:00:00Z';
+    const morningOf = chicago ? '2027-03-14T14:00:00Z' : '2027-03-14T09:00:00Z';
+    const rows = [
+      at('morning', morningOf),
+      at('day', '2027-03-14T00:00:00Z', true),
+      at('evening-before', eveningBefore),
+    ];
+    // Threads are listed newest first; each of these is a thread of one.
+    expect(groupThreads(rows).map((thread) => thread[0].id)).toEqual([
+      'morning',
+      'day',
+      'evening-before',
+    ]);
+    expect(messageTime(rows[1])).toBe(new Date(2027, 2, 14).getTime());
   });
 });

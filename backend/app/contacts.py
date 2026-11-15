@@ -193,6 +193,8 @@ def _comm_out(c: Communication) -> dict:
         "status": c.status,
         "sent_at": c.sent_at,
         "received_at": c.received_at,
+        # An all-day calendar event: received_at is midnight UTC of its date, not an instant.
+        "all_day": bool(c.all_day),
         "notes": c.notes,
         "source": c.source,
         "source_id": c.source_id,
