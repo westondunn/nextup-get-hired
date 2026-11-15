@@ -16,6 +16,8 @@ import {
   runCorrespondenceSync,
   saveCorrespondence,
 } from './correspondence-api';
+import { GoogleConnectionCard } from './GoogleConnectionCard';
+import type { GoogleResult } from './google-api';
 import { LocalSessionCard } from './LocalSessionCard';
 
 const SERVICE_LABELS: Record<string, string> = {
@@ -34,7 +36,14 @@ function syncFailure(error: unknown, fallback: string): string {
 }
 
 /* ---------- Main Settings View ---------- */
-export default function SettingsView() {
+export default function SettingsView({
+  googleResult = null,
+}: {
+  // The outcome of a Google consent flow that has just sent the browser back here.
+  googleResult?: GoogleResult | null;
+}) {
+  // Whether the integrations lock is open in this browser.
+  const [sessionActive, setSessionActive] = useState(false);
   // Health
   const [health, setHealth] = useState<Health | null>(null);
   const [healthError, setHealthError] = useState('');
@@ -496,7 +505,8 @@ export default function SettingsView() {
       <Section title="Integrations">
         <p className="mb-3 text-xs text-slate-500">Connect external services.</p>
 
-        <LocalSessionCard />
+        <LocalSessionCard onChange={setSessionActive} />
+        <GoogleConnectionCard sessionActive={sessionActive} result={googleResult} />
 
         {/* Google Calendar (read-only sync, backend-backed) */}
         <IntegrationCard

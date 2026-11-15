@@ -185,6 +185,7 @@ def test_the_secret_is_sealed_before_it_reaches_the_database(api):
         "client_configured": True,
         "client_id": CLIENT_ID,
         "state": "not_connected",
+        "enabled_capabilities": ["gmail"],
         "granted_capabilities": [],
         "account_address": None,
     }
@@ -246,6 +247,7 @@ def test_nothing_stored_is_reported_as_not_configured(api):
         "client_configured": False,
         "client_id": None,
         "state": "not_configured",
+        "enabled_capabilities": ["gmail"],
         "granted_capabilities": [],
         "account_address": None,
     }
@@ -256,6 +258,7 @@ def test_nothing_stored_is_reported_as_not_configured(api):
         "client_configured": False,
         "client_id": None,
         "state": "not_configured",
+        "enabled_capabilities": [],
         "granted_capabilities": [],
         "account_address": None,
     }
@@ -289,11 +292,27 @@ def test_the_report_carries_the_state_and_never_a_credential(api):
             "client_configured",
             "client_id",
             "state",
+            "enabled_capabilities",
             "granted_capabilities",
             "account_address",
         }
         assert row.client_secret_sealed not in response.text and not leaks(response)
         assert row.refresh_token_sealed is None or row.refresh_token_sealed not in response.text
+
+
+@pytest.mark.parametrize(
+    "flags,enabled",
+    [
+        ({}, []),
+        ({"gmail_sync_enabled": True}, ["gmail"]),
+        ({"calendar_sync_enabled": True}, ["calendar"]),
+        ({"gmail_sync_enabled": True, "calendar_sync_enabled": True}, ["gmail", "calendar"]),
+    ],
+)
+def test_the_report_names_the_capabilities_the_configuration_allows(api, flags, enabled):
+    client, _, current = api
+    current["settings"] = Settings(token_key=SecretStr(KEY), **flags)
+    assert client.get("/api/google/connection").json()["enabled_capabilities"] == enabled
 
 
 def test_the_report_names_what_google_granted_and_the_connected_account(api):

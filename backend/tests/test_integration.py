@@ -174,6 +174,7 @@ def test_the_running_stack_refuses_to_store_a_google_client():
                 "client_configured": False,
                 "client_id": None,
                 "state": "not_configured",
+                "enabled_capabilities": [],
                 "granted_capabilities": [],
                 "account_address": None,
             }
