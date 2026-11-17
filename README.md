@@ -27,7 +27,7 @@ It is designed for one person running their own instance. It is not a hosted ser
 | Database migration safeguards | Implemented; runtime validation in progress |
 | Portable installation (Linux, macOS, Windows) | In progress; no platform is supported yet. Verification has been run on Linux with Docker only |
 | First-run onboarding | Planned; no guided setup exists |
-| External integrations (job-board feeds, read-only mail and calendar sync) | Present in the code; switched off in every shipped configuration; no supported way to enable them yet. None has a support status; see [integrations and compatibility](docs/INTEGRATIONS.md) |
+| External integrations (job listings from Adzuna and from Greenhouse, Lever and Ashby boards; read-only Gmail and Google Calendar sync) | Present in the code; switched off in every shipped configuration; no supported way to enable them yet. None has a support status; see [integrations and compatibility](docs/INTEGRATIONS.md) |
 | Other mail and calendar providers | Not implemented; under evaluation, with no commitment to a provider or protocol |
 | Optional AI assistance | Not implemented; planned as an explicit opt-in |
 | Authentication | None. The API is unauthenticated, and the shipped configurations publish ports on the loopback interface only. Do not expose it to a network. The API refuses requests that are not addressed to `localhost` or `127.0.0.1` and cross-site state-changing requests; that is not authentication |

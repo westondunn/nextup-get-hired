@@ -2,7 +2,7 @@
 
 These are the gates that must be met before NextUp, or any of its integrations, is described as publicly supported. A gate is checked only when the evidence is linked next to it. A merged pull request or a closed issue is not evidence on its own.
 
-**Snapshot date: 2026-11-14, last reconciled at commit `c143b87`.** Six gates are met; the rest are open. A gate that states a target is met by a recorded result, never by the target being written down. The ordered work is in the [roadmap](ROADMAP.md); scope and acceptance criteria are in the linked issues.
+**Snapshot date: 2026-11-14, last reconciled at commit `c143b87`.** Six gates are met; the rest are open. On 2026-11-17, at `4589435`, the compatibility-matrix gates were added and the list of routes under the local-session gate was brought up to date; no other gate was re-examined. A gate that states a target is met by a recorded result, never by the target being written down. The ordered work is in the [roadmap](ROADMAP.md); scope and acceptance criteria are in the linked issues.
 
 ## Core application
 
@@ -14,10 +14,19 @@ These are the gates that must be met before NextUp, or any of its integrations, 
 
 - [ ] Every shipped configuration publishes ports on the loopback interface only. Evidence: pending.
 - [x] Requests to a non-local host name and cross-origin state-changing requests are refused ([#8](https://github.com/westondunn/nextup-get-hired/issues/8)). Evidence: merged in [#20](https://github.com/westondunn/nextup-get-hired/pull/20) as `baf9028`; [hosted CI run on `main`](https://github.com/westondunn/nextup-get-hired/actions/runs/43509731795), which includes the integration, browser and secret-audit checks; local probes of the development stack are recorded in the pull request.
-- [x] Integration and credential routes require a local session ([#18](https://github.com/westondunn/nextup-get-hired/issues/18)). Evidence: the setup code and session routes were merged in [#22](https://github.com/westondunn/nextup-get-hired/pull/22) as `81ac008`, and the session requirement and Settings prompt in [#31](https://github.com/westondunn/nextup-get-hired/pull/31) as `7370e9a`; [hosted CI run on `main`](https://github.com/westondunn/nextup-get-hired/actions/runs/43538353763), which includes the integration suites, the live-stack session test, the browser tests and the secret audit; local probes of the development stack are recorded in both pull requests. The routes covered today are the two that change or run mail and calendar sync; routes added for a connection must be added to the same requirement.
+- [x] Integration and credential routes require a local session ([#18](https://github.com/westondunn/nextup-get-hired/issues/18)). Evidence: the setup code and session routes were merged in [#22](https://github.com/westondunn/nextup-get-hired/pull/22) as `81ac008`, and the session requirement and Settings prompt in [#31](https://github.com/westondunn/nextup-get-hired/pull/31) as `7370e9a`; [hosted CI run on `main`](https://github.com/westondunn/nextup-get-hired/actions/runs/43538353763), which includes the integration suites, the live-stack session test, the browser tests and the secret audit; local probes of the development stack are recorded in both pull requests. At `7370e9a` the routes covered were the two that change or run mail and calendar sync. The Google client and connection routes added since then require the session too, except the address Google sends the browser back to, which cannot ([SECURITY.md](../SECURITY.md)); `backend/tests/test_local_session.py` fails if the set of routes changes without the test changing. The run linked here predates those routes, so this must be rechecked at the release commit.
 - [ ] `SECURITY.md` states the authentication limits as they are at the release commit. Evidence: pending.
 - [ ] Pinned migration history is unchanged and every schema change is a new revision applied through the guard. Evidence: pending.
 - [ ] The verification run's secret audit passes at the release commit. Evidence: pending.
+
+## Compatibility matrix
+
+These apply to every release, whether or not it lets users enable an integration. They do not decide what evidence a support status requires or how often a row is re-validated between releases; both are open in [#27](https://github.com/westondunn/nextup-get-hired/issues/27).
+
+- [ ] Every integration present in the code at the release commit has a row in [INTEGRATIONS.md](INTEGRATIONS.md), including a provider reached only through a shared module ([#27](https://github.com/westondunn/nextup-get-hired/issues/27)). Evidence: pending.
+- [ ] Each row's implementation status matches the code and the shipped configurations at the release commit, and the snapshot line names that commit ([#27](https://github.com/westondunn/nextup-get-hired/issues/27)). Evidence: pending.
+- [ ] No row says Tested without a linked, dated evidence record that names the NextUp version, and no row describes an integration as supported because a protocol name, passing unit tests or a successful connection exist ([#27](https://github.com/westondunn/nextup-get-hired/issues/27)). Evidence: pending.
+- [ ] The comparison of the table with the code and with the evidence it cites is recorded for the release, with its commit and date ([#27](https://github.com/westondunn/nextup-get-hired/issues/27)). Evidence: pending.
 
 ## Every connection that is offered
 

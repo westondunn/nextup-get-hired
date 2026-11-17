@@ -10,8 +10,9 @@ Branch names below are suggestions that follow the [branching guide](BRANCHING.m
 
 ## What exists today
 
-- Read-only Gmail and Google Calendar sync are implemented and switched off in every shipped configuration. A consent flow that stores an encrypted grant exists in the API and has been tested with simulated Google responses only ([#10](https://github.com/westondunn/nextup-get-hired/issues/10), in progress). Sync uses the stored grant when one exists. There is no screen for the flow, and there is no supported way to enable any of it.
-- The API has no authentication and is published on the loopback interface only. It refuses requests to a non-local host name and cross-origin state-changing requests. Changing or running mail and calendar sync requires a local session; no other route does.
+- Read-only Gmail and Google Calendar sync are implemented and switched off in every shipped configuration. A consent flow that stores an encrypted grant exists in the API and has been tested with simulated Google responses only ([#10](https://github.com/westondunn/nextup-get-hired/issues/10), in progress). Sync uses the stored grant when one exists. Settings has a card that saves the Google client and starts the flow; in every shipped configuration it reports that no Google account can be connected. There is no supported way to enable any of it.
+- Job-listing fetching from Adzuna and from Greenhouse, Lever and Ashby boards is implemented and switched off in every shipped configuration, with no supported way to enable it.
+- The API has no authentication and is published on the loopback interface only. It refuses requests to a non-local host name and cross-origin state-changing requests. Changing or running mail and calendar sync requires a local session, and so do the Google client and connection routes, except the address Google sends the browser back to. No other route does.
 - The optional external classifier interface is described in [CORRESPONDENCE_SYNC.md](CORRESPONDENCE_SYNC.md) and is refused in every environment.
 - There is no code for other mail or calendar providers (IMAP, SMTP, CalDAV, iCalendar), an AI provider, MCP, a workflow tool, Google Docs or first-run onboarding.
 - Nothing has a support status. [INTEGRATIONS.md](INTEGRATIONS.md) records each integration's implementation and support status separately.
