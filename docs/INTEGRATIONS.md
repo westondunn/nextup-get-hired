@@ -2,7 +2,7 @@
 
 This is the canonical record of what NextUp can connect to, what has actually been tested, and how that is described. The direction behind it is in [decision 0002](decisions/0002-standards-first-interoperability.md). The process for keeping it current is tracked in [#27](https://github.com/westondunn/nextup-get-hired/issues/27).
 
-**Snapshot: 2026-11-17, commit `4589435`. No integration has a support status. Every integration is switched off in every shipped configuration, and there is no supported way to enable one.**
+**Snapshot: compared with the code at commit `4589435` on 2026-11-17. No integration has a support status. Every integration is switched off in every shipped configuration, and there is no supported way to enable one.**
 
 NextUp's core does not need any of these. The workspace is intended to be useful with nothing connected.
 
@@ -71,9 +71,30 @@ The Settings view also shows a "CSV Job Import" card. At this commit it describe
 These rules come from the acceptance criteria of [#27](https://github.com/westondunn/nextup-get-hired/issues/27) and from [decision 0002](decisions/0002-standards-first-interoperability.md). The evidence each support status requires, who records it and how often a row is re-validated are not settled, and nothing in this section settles them.
 
 - Every integration present in the code has a row. A provider reached only through a shared module, as Lever and Ashby are, is still an integration and has its own row.
-- Implementation status is read from the code and the shipped configurations at the snapshot commit. Support status is never worked out from it: a protocol name, passing unit tests or a successful connection is not evidence of support.
+- Implementation status is read from the code and the shipped configurations at the comparison commit, which is defined below. Support status is never worked out from it: a protocol name, passing unit tests or a successful connection is not evidence of support.
 - No row says Tested without a linked, dated evidence record that names the NextUp version.
 - Before a release the table is compared with the code and with the evidence it cites, and the comparison is recorded. The gates are in the [release checklist](RELEASE_CHECKLIST.md).
+
+### The comparison commit
+
+The snapshot line names the comparison commit: the commit whose code and shipped configurations the table was last compared with. It is always an earlier commit than the one that records the comparison, because a document cannot contain the identifier of its own commit. "At this commit" in this document means the comparison commit.
+
+The table still describes a later commit as long as nothing it describes has changed since the comparison commit. It is compared again, and the snapshot line is moved, when a later commit changes any of these:
+
+- a file under `backend/app/sources/`;
+- any other file that a row or a note under the table cites;
+- `backend/app/config.py`, a Compose file, a template under `env/` or `scripts/oss_env.py`, which together decide what a shipped configuration can switch on;
+- anything that adds, removes or redirects a request to an external service, wherever it is in the code.
+
+The first three can be checked by listing the files that differ between the comparison commit and the later one:
+
+```sh
+git diff --name-only <comparison commit> <later commit> -- backend/app/sources backend/app/config.py 'compose*.yaml' env scripts/oss_env.py <each file the table and its notes cite>
+```
+
+If that prints nothing, those files are unchanged. The fourth cannot be checked by path, so it needs a search of the later commit for outbound requests and their hosts. A change to this document alone, including the commit that records a comparison, does not call for another one.
+
+This is only about the table matching the code. It is not the re-validation of a support status, whose evidence and cadence are open in [#27](https://github.com/westondunn/nextup-get-hired/issues/27).
 
 ## Profile template
 
