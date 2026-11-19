@@ -46,6 +46,10 @@ backups/
 *.pgdump
 *.sql.gz
 
+# Agent runtime (Paperclip and Codex working files; may contain credentials)
+.paperclip/
+.paperclip-runtime/
+
 # OS and editor leftovers
 .DS_Store
 Thumbs.db
