@@ -1,0 +1,77 @@
+# Maintainer approval gate for merges into main.
+#
+# Run this by hand from the Actions tab ("Run workflow", branch: main) with the
+# pull request number. It marks that pull request's current head commit with a
+# successful "maintainer-approval" status. A ruleset on main requires that
+# status, with no bypass, so a pull request cannot be merged until the
+# maintainer has run this workflow for its latest commit.
+#
+# Agents cannot open the gate: their GitHub token has read-only Actions access
+# (cannot start this workflow), read-only commit statuses (cannot post the
+# status directly), and no Workflows permission (cannot edit this file).
+# A new commit pushed after approval needs a new approval.
+
+name: Maintainer approval
+
+on:
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: Pull request number to approve
+        required: true
+        type: number
+
+permissions:
+  contents: read
+  pull-requests: read
+  statuses: write
+
+concurrency:
+  group: maintainer-approval-${{ inputs.pr_number }}
+  cancel-in-progress: false
+
+jobs:
+  approve:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Mark the pull request head commit as approved
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ inputs.pr_number }}
+          ACTOR: ${{ github.triggering_actor }}
+          RUN_REF: ${{ github.ref }}
+        run: |
+          set -eu
+
+          if [ "$ACTOR" != "westondunn" ]; then
+            echo "Only westondunn may approve merges. Started by: $ACTOR"
+            exit 1
+          fi
+
+          if [ "$RUN_REF" != "refs/heads/main" ]; then
+            echo "Run this workflow from the main branch. Current ref: $RUN_REF"
+            exit 1
+          fi
+
+          pr_json=$(gh api "repos/$REPO/pulls/$PR_NUMBER")
+          state=$(printf '%s' "$pr_json" | jq -r '.state')
+          base=$(printf '%s' "$pr_json" | jq -r '.base.ref')
+          head_sha=$(printf '%s' "$pr_json" | jq -r '.head.sha')
+
+          if [ "$state" != "open" ]; then
+            echo "Pull request #$PR_NUMBER is not open (state: $state)."
+            exit 1
+          fi
+
+          if [ "$base" != "main" ]; then
+            echo "Pull request #$PR_NUMBER targets $base, not main."
+            exit 1
+          fi
+
+          gh api -X POST "repos/$REPO/statuses/$head_sha" \
+            -f state=success \
+            -f context=maintainer-approval \
+            -f description="Approved by $ACTOR for pull request #$PR_NUMBER"
+
+          echo "Approved pull request #$PR_NUMBER at commit $head_sha."
