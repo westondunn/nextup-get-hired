@@ -10,7 +10,7 @@ The workspace is meant to be useful on its own. Connecting a mailbox, a calendar
 
 NextUp brings the working parts of a job search into one place:
 
-- a daily view of what needs attention, and a task plan with a calendar;
+- A daily view of what needs attention, and a task plan with a calendar;
 - applications, with their stages, timeline and offer details;
 - a job board, saved searches and alerts, with relevance scoring against your profile;
 - contacts and correspondence;
