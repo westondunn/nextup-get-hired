@@ -26,7 +26,7 @@ It is designed for one person running their own instance. It is not a hosted ser
 | Core application (backend, worker, frontend) | Implemented; under test |
 | Database migration safeguards | Implemented; runtime validation in progress |
 | Portable installation (Linux, macOS, Windows) | In progress; no platform is supported yet. Verification has been run on Linux with Docker only |
-| First-run onboarding | Planned; no guided setup exists |
+| First-run onboarding | [Proposed core setup design](docs/CORE_ONBOARDING.md); implementation and validation pending |
 | External integrations (job listings from Adzuna and from Greenhouse, Lever and Ashby boards; read-only Gmail and Google Calendar sync) | Present in the code; switched off in every shipped configuration; no supported way to enable them yet. None has a support status; see [integrations and compatibility](docs/INTEGRATIONS.md) |
 | Other mail and calendar providers | Not implemented; under evaluation, with no commitment to a provider or protocol |
 | Optional AI assistance | Not implemented; planned as an explicit opt-in |
