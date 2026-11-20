@@ -37,6 +37,8 @@ This builds the images and starts a disposable stack under a random project name
 
 ## Local development stack
 
+The [core first-run design](CORE_ONBOARDING.md) records this launcher as the baseline for a proposed guided path with integrations and AI off.
+
 ```sh
 python3 scripts/local.py --env dev doctor    # check tools and configuration; starts nothing
 python3 scripts/local.py --env dev start     # build and start
