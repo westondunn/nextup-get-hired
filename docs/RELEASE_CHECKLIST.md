@@ -21,18 +21,20 @@ These are the gates that must be met before NextUp, or any of its integrations, 
 
 ## Compatibility matrix
 
-These apply to every release, whether or not it lets users enable an integration. They are about the table matching the code. They do not decide what evidence a support status requires or how often a support status is re-validated; both are open in [#27](https://github.com/westondunn/nextup-get-hired/issues/27).
+These gates apply to every release. The release maintainer records the inventory comparison and reviews support evidence under the [re-validation policy](INTEGRATIONS.md#support-evidence-and-re-validation).
 
 - [ ] Every integration present in the code at the release commit has a row in [INTEGRATIONS.md](INTEGRATIONS.md), including a provider reached only through a shared module ([#27](https://github.com/westondunn/nextup-get-hired/issues/27)). Evidence: pending.
 - [ ] Each row's implementation status matches the code and the shipped configurations at the comparison commit named in the snapshot line of [INTEGRATIONS.md](INTEGRATIONS.md). That commit is an ancestor of the release commit, and nothing listed under [the comparison commit](INTEGRATIONS.md#the-comparison-commit) has changed between the two; if something has, the table is compared again first ([#27](https://github.com/westondunn/nextup-get-hired/issues/27)). Evidence: pending.
 - [ ] No row says Tested without a linked, dated evidence record that names the NextUp version, and no row describes an integration as supported because a protocol name, passing unit tests or a successful connection exist ([#27](https://github.com/westondunn/nextup-get-hired/issues/27)). Evidence: pending.
 - [ ] The comparison of the table with the code and with the evidence it cites is recorded with the comparison commit and the date, in the pull request that moves the snapshot line, and that pull request is linked here ([#27](https://github.com/westondunn/nextup-get-hired/issues/27)). Evidence: pending.
 
+- [ ] The release pull request records the candidate commit, review date and outcome for every row. Each claimed status has current evidence, and claims with missing, stale or failing evidence are narrowed or withdrawn. Evidence: pending.
+
 ## Every connection that is offered
 
 These apply to each integration a release lets users enable. The Google gates below are the first instance.
 
-- [ ] The integration has a complete profile in [INTEGRATIONS.md](INTEGRATIONS.md), with its support status, tested configurations and known limitations ([#27](https://github.com/westondunn/nextup-get-hired/issues/27)). Evidence: pending.
+- [ ] The integration has a complete profile in [INTEGRATIONS.md](INTEGRATIONS.md), with its support status, configuration coverage and known limitations ([#27](https://github.com/westondunn/nextup-get-hired/issues/27)). Evidence: pending.
 - [ ] The profile states what the credential actually permits and every destination that receives data ([#27](https://github.com/westondunn/nextup-get-hired/issues/27)). Evidence: pending.
 - [ ] Connect, reauthorize, disconnect and revocation are tested, including a credential revoked at the provider. Evidence: pending.
 - [ ] Authoritative records, user edits and approved content are preserved across disconnect, retry, duplicate delivery and a change of provider ([#24](https://github.com/westondunn/nextup-get-hired/issues/24)). Evidence: pending.
