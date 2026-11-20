@@ -12,6 +12,6 @@ As of 2026-11-17:
 - Nothing has been validated for public use, so nothing has a support status.
 - Other mail and calendar providers, sending mail, AI assistance and assistant or workflow access are not implemented. Which of them to build, and how, is undecided.
 
-NextUp describes support in three terms, each of which needs evidence: **Tested**, **Experimental** and **Custom connection**. A protocol name or a successful connection is not treated as support.
+NextUp describes support in three terms, each of which needs evidence: **Tested**, **Experimental** and **Custom connection**. Tested applies to the specific NextUp version and configurations covered by dated evidence. Experimental requires documented opt-in and limited validation. Custom connection covers setup and connectivity checks for a documented interface, with compatibility depending on the endpoint supplied by the user. The release maintainer reviews each row before release. See the [support evidence and re-validation policy](../INTEGRATIONS.md#support-evidence-and-re-validation).
 
 Published from commit `ea8b896`. Last synchronized: 2026-11-13 (wiki revision `accaa0b`). This draft has changed since then and has not been republished.
