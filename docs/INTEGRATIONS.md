@@ -27,11 +27,26 @@ Every integration is described on two independent axes.
 | Tested | The profile below was validated on a named NextUp version, and the evidence is linked |
 | Custom connection | The user supplies an endpoint or server that follows a documented protocol or API profile. NextUp offers the settings and a connectivity check. That particular server or model has not been tested, and no claim is made that it works |
 
-An integration that is implemented but disabled is never described as supported because its unit tests pass. The evidence each support status requires, and how often it is re-validated, are still to be defined in [#27](https://github.com/westondunn/nextup-get-hired/issues/27).
+A disabled or unimplemented integration has support status **None**. Protocol compatibility, passing unit tests and a successful connection alone do not qualify an integration for a support status.
 
-## Capability vocabulary (proposed)
+## Support evidence and re-validation
 
-These names are proposals, to be settled in [#24](https://github.com/westondunn/nextup-get-hired/issues/24) and [#27](https://github.com/westondunn/nextup-get-hired/issues/27). They exist so that one capability is never inferred from another.
+The person running the validation records the date, exact NextUp commit or release, configuration, checks and outcomes in a repository document or pull request. The release maintainer reviews that record, links it from the profile, and records the resulting status in the matrix. Evidence uses test accounts or synthetic data and omits credentials and personal data.
+
+| Status | Evidence required to assign or retain it |
+| --- | --- |
+| None | The implementation and configuration review shows the integration is unavailable, or the record lacks the evidence required for another status |
+| Experimental | A complete profile and a dated run on the named NextUp version demonstrate documented opt-in setup, a representative workflow, and safe failure and recovery for the capability offered. Record which checks or configurations are still missing. Experimental integrations ship off by default |
+| Tested | A complete profile links a dated end-to-end run on the named NextUp version against the actual provider, server or model configuration claimed. The run covers setup, the stated workflow, applicable failure and recovery cases, and the relevant connection and capability gates in the [release checklist](RELEASE_CHECKLIST.md). The claim applies only to the configurations and capabilities exercised |
+| Custom connection | A complete profile identifies the supported protocol or API contract and documents endpoint configuration and the connectivity check. A dated run on the named NextUp version shows that setup and the check work against a controlled reference endpoint and that connection failures are reported. Each user-supplied endpoint remains outside that evidence |
+
+At each release, the release maintainer reviews every row against its evidence, records the release candidate commit, date, and outcome for each row in the release pull request, and links the review from the checklist. Re-run the applicable checks on the release candidate before carrying forward a support status. Review an affected row again when its capability, permissions, data flow, or provider contract changes, or when a regression invalidates its evidence.
+
+If a claimed configuration fails or its evidence is missing or stale, remove that configuration from the claim. If none remain, change the row to Experimental or Custom connection only when the evidence meets that status's requirements. Otherwise change it to None and withdraw the affected support claim from the public documentation.
+
+## Capability vocabulary
+
+Use these names in profiles so that one capability is never inferred from another. The correspondence adapter contract is tracked in [#24](https://github.com/westondunn/nextup-get-hired/issues/24).
 
 | Capability | Meaning |
 | --- | --- |
@@ -70,7 +85,7 @@ The Settings view also shows a "CSV Job Import" card. At this commit it describe
 
 ## Keeping the table current
 
-These rules come from the acceptance criteria of [#27](https://github.com/westondunn/nextup-get-hired/issues/27) and from [decision 0002](decisions/0002-standards-first-interoperability.md). The evidence each support status requires, who records it and how often a row is re-validated are not settled, and nothing in this section settles them.
+These rules come from the acceptance criteria of [#27](https://github.com/westondunn/nextup-get-hired/issues/27) and from [decision 0002](decisions/0002-standards-first-interoperability.md).
 
 - Every integration present in the code has a row. A provider reached only through a shared module, as Lever and Ashby are, is still an integration and has its own row.
 - Implementation status is read from the code and the shipped configurations at the comparison commit, which is defined below. Support status is never worked out from it: a protocol name, passing unit tests or a successful connection is not evidence of support.
@@ -96,7 +111,7 @@ git diff --name-only <comparison commit> <later commit> -- backend/app/sources b
 
 If that prints nothing, those files are unchanged. The fourth cannot be checked by path, so it needs a search of the later commit for outbound requests and their hosts. A change to this document alone, including the commit that records a comparison, does not call for another one.
 
-This is only about the table matching the code. It is not the re-validation of a support status, whose evidence and cadence are open in [#27](https://github.com/westondunn/nextup-get-hired/issues/27).
+The comparison commit records the inventory review. Release reviews of support evidence follow [the re-validation policy](#support-evidence-and-re-validation).
 
 ## Profile template
 
@@ -108,10 +123,10 @@ When an integration can be enabled, it gets a profile with every field below. A 
 | Protocol or API and version | For example the API version, or the RFC and extensions relied on |
 | Authentication | The flow, who owns the client registration, and where credentials are stored |
 | What the credential permits | The actual permissions granted, including anything beyond what NextUp uses |
-| Supported configurations | Account types, server software and versions, or model and endpoint, that were tested |
+| Configurations and validation coverage | Account types, server software and versions, or model and endpoint. Record which were exercised and where coverage is incomplete |
 | Data destinations | Every system that receives data, and what it receives |
-| Retention | What NextUp stores, for how long, and what happens on disconnect |
-| Tested NextUp version | Commit or release |
+| Retention | What NextUp and each destination store, for how long, and what happens on disconnect. Record unknown retention explicitly |
+| NextUp version used for validation | Commit or release |
 | Evidence | Links to dated validation records and test runs |
 | Limitations | Known gaps and unsupported cases |
 | Failure behavior | What the user sees and what is preserved when the provider is unavailable, the credential is revoked, or consent is partial |
