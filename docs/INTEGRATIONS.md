@@ -59,7 +59,7 @@ The [read-only correspondence capability contract](CORRESPONDENCE_CAPABILITY.md)
 | Other mailboxes (IMAP, other provider APIs) | Correspondence: read | Undecided | Not implemented | None | Evaluation: [#25](https://github.com/westondunn/nextup-get-hired/issues/25) |
 | Sending mail | Correspondence: send | Undecided | Not implemented | None | Deferred; no issue |
 | Other calendars (CalDAV, iCalendar files, other provider APIs) | Calendar | Undecided | Not implemented | None | Deferred; no issue |
-| AI processor | AI task | Undecided | Not implemented | None | Contract: [#26](https://github.com/westondunn/nextup-get-hired/issues/26) |
+| AI processor | AI task: classification hint | OpenAI-compatible Chat Completions (target) | Not implemented | None | [Task contract and evaluation](AI_TASK_CONTRACT.md) |
 | Workflow or assistant access (versioned API, MCP) | Workflow access | Undecided | Not implemented | None | Deferred; no issue |
 
 Greenhouse, Lever and Ashby are separate services with separate APIs, so each has its own row, although one module (`backend/app/sources/employer_boards.py`) reads all three. That module is not an integration of its own. Employer-board discovery (`backend/app/discovery_api.py`, the Discovery view) fetches the boards the user chooses, either from a bundled list of example boards (`backend/app/employer_catalog.py`: 37 Greenhouse boards and 3 Lever boards at this commit, with no claim that any of them is reachable) or added by hand as a provider and a board token. A request carries the board token and nothing from the profile; postings are compared with the profile after they are read. No validation against a live service is recorded for any of the four job-listing providers.
