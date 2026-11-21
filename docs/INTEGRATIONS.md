@@ -43,6 +43,8 @@ These names are proposals, to be settled in [#24](https://github.com/westondunn/
 | AI task: *name* | Send selected content to a processor the user chose, for one named task |
 | Workflow access | Another tool reads or writes NextUp through a defined interface |
 
+The [read-only correspondence capability contract](CORRESPONDENCE_CAPABILITY.md) defines the proposed adapter requirements and maps them to the existing Gmail implementation.
+
 ## Current state
 
 | Integration | Capability | Protocol or API | Implementation status | Support status | Notes |
