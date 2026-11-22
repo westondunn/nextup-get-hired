@@ -2,7 +2,7 @@
 
 This page lists the planned outcomes. P0 and P1 are in order; the section added after them is not yet placed. It is public planning for a pre-release project. Outside contributions are not being accepted yet (see [CONTRIBUTING.md](../CONTRIBUTING.md)), so nothing here is an invitation to start work.
 
-**Snapshot date: 2026-11-14, last reconciled at commit `c143b87`.** Status, scope and acceptance criteria live in the linked issues; where this page and an issue disagree, the issue is right. The parent tracking issue is [#3](https://github.com/westondunn/nextup-get-hired/issues/3). There is no GitHub Project for this repository.
+**Roadmap snapshot: 2026-11-14 at `c143b87`.** The interoperability and onboarding entries for #24, #26, #27 and #28 were reconciled against `main` at `bc536d1073f799da1efd2f7ccc8dae038be0e617`, covering the documentation delivered in PRs #65–#68. Status, scope and acceptance criteria live in the linked issues; where this page and an issue disagree, the issue is right. The parent tracking issue is [#3](https://github.com/westondunn/nextup-get-hired/issues/3). There is no GitHub Project for this repository.
 
 An outcome is checked only when its completion gate is met and the evidence is linked. A branch, an open pull request or a closed issue does not check it. Readiness gates for a public release are in the [release checklist](RELEASE_CHECKLIST.md).
 
@@ -151,13 +151,13 @@ This remains the first connection to be completed and validated. It is not suppo
 
 ## Interoperability and onboarding (priority provisional)
 
-These outcomes were added on 2026-11-13 to carry the direction in [decision 0002](decisions/0002-standards-first-interoperability.md). They have no agreed position relative to P0–P3, and nothing in P0 or P1 has been moved to make room for them. Every protocol, provider and packaging choice they mention is undecided.
+These outcomes were added on 2026-11-13 to carry the direction in [decision 0002](decisions/0002-standards-first-interoperability.md). They have no agreed position relative to P0–P3, and nothing in P0 or P1 has been moved to make room for them. The linked decision record tracks which choices remain open.
 
 - [ ] **Outcome: the standards-first interoperability policy is accepted**
   - Tracking: [#23](https://github.com/westondunn/nextup-get-hired/issues/23)
   - Priority and dependencies: provisional; none
   - Suggested branch: `docs/23-standards-first-interoperability`
-  - Contributor notes: `docs/decisions/0002-standards-first-interoperability.md`; the direction is agreed, the technical choices are proposals
+  - Contributor notes: `docs/decisions/0002-standards-first-interoperability.md`; the direction is agreed and the overall record awaits maintainer acceptance
   - Contribution availability: maintainer-only
   - Complete when: the maintainer sets the record's status and the public documents contain none of the excluded claims
   - Evidence: pending
@@ -168,8 +168,8 @@ These outcomes were added on 2026-11-13 to carry the direction in [decision 0002
   - Suggested branch: `docs/24-correspondence-capability-contract`
   - Contributor notes: a contract document under `docs/`; maps the existing Gmail adapter onto it; no code change, no renamed stored keys
   - Contribution availability: maintainer-only
-  - Complete when: the contract is reviewed and merged with the Gmail mapping and its gaps
-  - Evidence: pending
+  - Complete when: the maintainer accepts the merged contract with the Gmail mapping and its gaps
+  - Evidence: [the proposed contract](CORRESPONDENCE_CAPABILITY.md), including the Gmail mapping and required synthetic tests, merged in [PR #65](https://github.com/westondunn/nextup-get-hired/pull/65) ([`759e53c`](https://github.com/westondunn/nextup-get-hired/commit/759e53cd3dfa930de53a2c74c307aa7bf1276cbd)). Maintainer acceptance in [#24](https://github.com/westondunn/nextup-get-hired/issues/24) and future adapter validation are pending.
 
 - [ ] **Outcome: a second, independent email adapter has been evaluated**
   - Tracking: [#25](https://github.com/westondunn/nextup-get-hired/issues/25)
@@ -180,23 +180,23 @@ These outcomes were added on 2026-11-13 to carry the direction in [decision 0002
   - Complete when: a written evaluation ends in one recommendation, or in a recommendation not to proceed
   - Evidence: pending
 
-- [ ] **Outcome: an optional AI task contract is defined, with connectivity and quality evaluated separately**
+- [x] **Outcome: an optional AI task contract defines separate connectivity and quality checks**
   - Tracking: [#26](https://github.com/westondunn/nextup-get-hired/issues/26)
   - Priority and dependencies: provisional; follows [#23](https://github.com/westondunn/nextup-get-hired/issues/23)
   - Suggested branch: `docs/26-ai-task-contract`
-  - Contributor notes: one narrow task, proposed as a classification hint for an imported message; no provider adapter and no general agent
+  - Contributor notes: one narrow task, a classification hint for an imported message
   - Contribution availability: maintainer-only
   - Complete when: the contract names one task, its schema, consent and destination rules, and separate connectivity and quality checks
-  - Evidence: pending
+  - Evidence: [the AI task contract](AI_TASK_CONTRACT.md) merged in [PR #66](https://github.com/westondunn/nextup-get-hired/pull/66) ([`1cd5886`](https://github.com/westondunn/nextup-get-hired/commit/1cd5886e40e47b312476234af346708357ef232e)). Processor implementation, endpoint validation and measured quality remain pending.
 
-- [ ] **Outcome: a tested-compatibility policy and support matrix are maintained**
+- [x] **Outcome: a tested-compatibility policy and support matrix are maintained**
   - Tracking: [#27](https://github.com/westondunn/nextup-get-hired/issues/27)
   - Priority and dependencies: provisional; follows [#23](https://github.com/westondunn/nextup-get-hired/issues/23)
   - Suggested branch: `docs/27-compatibility-matrix`
   - Contributor notes: [INTEGRATIONS.md](INTEGRATIONS.md); implementation status and support status stay separate
   - Contribution availability: maintainer-only
   - Complete when: every integration in code has a row and no row says Tested without linked, dated evidence
-  - Evidence: pending
+  - Evidence: the [support policy and matrix](INTEGRATIONS.md#support-evidence-and-re-validation) and [release review gates](RELEASE_CHECKLIST.md#compatibility-matrix) were delivered in [PR #67](https://github.com/westondunn/nextup-get-hired/pull/67) ([`7dee028`](https://github.com/westondunn/nextup-get-hired/commit/7dee028ab6b817a0afd6ab8410c35fa52bb6d02b)). The matrix covers the implemented integrations and every row has support status None.
 
 - [ ] **Outcome: first-run setup of the core application is guided and validated, with no integration or AI**
   - Tracking: [#28](https://github.com/westondunn/nextup-get-hired/issues/28)
@@ -205,7 +205,7 @@ These outcomes were added on 2026-11-13 to carry the direction in [decision 0002
   - Contributor notes: design first; no packaging approach chosen in advance; migration confirmation, secret files and loopback exposure are not weakened
   - Contribution availability: maintainer-only
   - Complete when: the design is accepted, and clean-machine and representative-user validation are recorded separately from their targets
-  - Evidence: pending
+  - Evidence: [the proposed first-run design](CORE_ONBOARDING.md) merged in [PR #68](https://github.com/westondunn/nextup-get-hired/pull/68) ([`bc536d1`](https://github.com/westondunn/nextup-get-hired/commit/bc536d1073f799da1efd2f7ccc8dae038be0e617)). Maintainer acceptance in [#28](https://github.com/westondunn/nextup-get-hired/issues/28), implementation, clean-machine runs and representative-user sessions remain pending.
 
 ## P2 — Optional workflow access (planned, not yet tracked)
 
@@ -218,7 +218,7 @@ No issues have been filed.
 
 ## P3 — Optional AI assistance and operations tooling (planned)
 
-The first AI task contract is tracked in [#26](https://github.com/westondunn/nextup-get-hired/issues/26). Nothing else here has an issue.
+The first [AI task contract](AI_TASK_CONTRACT.md) was delivered for [#26](https://github.com/westondunn/nextup-get-hired/issues/26). The implementation and evaluation work below is untracked.
 
 - A processor adapter only where a defined task needs one. Local inference is optional, and cloud processing is an explicit opt-in with the destination shown.
 - A separate evaluation of AI quality against labelled synthetic fixtures and a rule-only baseline, so that working connectivity is not mistaken for demonstrated quality.
