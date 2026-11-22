@@ -1,7 +1,7 @@
 # 0002 — Standards-first interoperability
 
 - **Status of the direction:** Agreed by the maintainer on 2026-11-13.
-- **Status of every technical choice below:** Proposed or undecided. Nothing here is implemented, scheduled or supported.
+- **Status of this record:** Final maintainer acceptance remains open in [#23](https://github.com/westondunn/nextup-get-hired/issues/23). The table below records individual decisions and documentation deliveries.
 - **Date:** 2026-11-13, written against commit `81ac008`.
 - **Tracking:** [#23](https://github.com/westondunn/nextup-get-hired/issues/23); part of [#3](https://github.com/westondunn/nextup-get-hired/issues/3).
 
@@ -63,20 +63,21 @@ These are how NextUp will describe things. They are not commitments to build eve
 - MCP describes itself as "an open-source standard for connecting AI applications to external systems" ([MCP introduction][mcp-intro]). It is a possible future way for assistants to reach NextUp. It is not an inference API, a route to subscription access, or application authorization.
 - No MCP server, plugin platform or orchestration layer will be added only to be able to claim standards support.
 
-## Not decided
+## Decisions, documentation and open choices
 
-| Question | Where it is decided |
+| Topic | Status and tracking |
 | --- | --- |
-| The contract every read-only correspondence adapter must meet | [#24](https://github.com/westondunn/nextup-get-hired/issues/24) |
-| Whether to build a second email adapter, and which | [#25](https://github.com/westondunn/nextup-get-hired/issues/25) |
-| The flow and token storage for the Google connection | Decided in [decision 0003](0003-google-connection.md), accepted on 2026-11-14 ([#9](https://github.com/westondunn/nextup-get-hired/issues/9)). Registration ownership was decided on 2026-11-14: user-owned |
-| Registration ownership for providers other than Google | Not tracked; decided per provider when one is proposed |
-| The first AI task, its contract, and the first API compatibility target | [#26](https://github.com/westondunn/nextup-get-hired/issues/26) |
-| Evidence required for each support status, and how often it is re-validated | [#27](https://github.com/westondunn/nextup-get-hired/issues/27) |
-| The guided setup path, packaging approach and first platforms | [#28](https://github.com/westondunn/nextup-get-hired/issues/28) |
-| A versioned public API | Not tracked; deferred |
-| Sending mail, wider calendar synchronization, more providers, MCP access, workflow tooling, advanced automation | Not tracked; deferred or discovery work listed in the [roadmap](../ROADMAP.md) |
-| Where the new outcomes sit relative to existing priorities | Planning; not decided here |
+| Read-only correspondence adapter contract | [Proposed contract](../CORRESPONDENCE_CAPABILITY.md) delivered in [PR #65](https://github.com/westondunn/nextup-get-hired/pull/65) ([`759e53c`](https://github.com/westondunn/nextup-get-hired/commit/759e53cd3dfa930de53a2c74c307aa7bf1276cbd)), including the Gmail mapping and required synthetic tests. Maintainer acceptance remains pending in [#24](https://github.com/westondunn/nextup-get-hired/issues/24). |
+| Whether to build a second email adapter, and which | Evaluation open in [#25](https://github.com/westondunn/nextup-get-hired/issues/25). |
+| Google client registration, connection flow and token storage | [Decision 0003](0003-google-connection.md) was accepted on 2026-11-14 ([#9](https://github.com/westondunn/nextup-get-hired/issues/9)). Google registration is user-owned. |
+| Registration ownership for providers other than Google | Open. Consider ownership per provider when one is proposed. |
+| Optional AI task and its contract | [Imported-message classification hint](../AI_TASK_CONTRACT.md) delivered in [PR #66](https://github.com/westondunn/nextup-get-hired/pull/66) ([`1cd5886`](https://github.com/westondunn/nextup-get-hired/commit/1cd5886e40e47b312476234af346708357ef232e)) for [#26](https://github.com/westondunn/nextup-get-hired/issues/26). Connectivity and quality checks are specified and await implementation and evaluation. |
+| First AI API compatibility target | Selection remains open. The contract describes an OpenAI-compatible Chat Completions profile as a candidate for later testing. |
+| Support evidence and re-validation | [Policy and matrix](../INTEGRATIONS.md#support-evidence-and-re-validation) delivered in [PR #67](https://github.com/westondunn/nextup-get-hired/pull/67) ([`7dee028`](https://github.com/westondunn/nextup-get-hired/commit/7dee028ab6b817a0afd6ab8410c35fa52bb6d02b)) for [#27](https://github.com/westondunn/nextup-get-hired/issues/27). Release candidates are subject to evidence review. Every current row has support status None. |
+| Guided core setup, packaging approach and first platforms | [Proposed first-run design](../CORE_ONBOARDING.md) delivered in [PR #68](https://github.com/westondunn/nextup-get-hired/pull/68) ([`bc536d1`](https://github.com/westondunn/nextup-get-hired/commit/bc536d1073f799da1efd2f7ccc8dae038be0e617)). Design acceptance, packaging and platform choices remain open in [#28](https://github.com/westondunn/nextup-get-hired/issues/28). Clean-machine and representative-user validation await implementation. |
+| A versioned public API | Open and untracked. |
+| Sending mail, wider calendar synchronization, more providers, MCP access, workflow tooling, advanced automation | Open. The [roadmap](../ROADMAP.md) lists these for deferral or discovery. |
+| Relative priority of the interoperability and onboarding outcomes | Open. Their position relative to P0–P3 remains provisional. |
 
 ## Alternatives and tradeoffs
 
