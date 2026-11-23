@@ -58,7 +58,7 @@ Use these names in profiles so that one capability is never inferred from anothe
 | AI task: *name* | Send selected content to a processor the user chose, for one named task |
 | Workflow access | Another tool reads or writes NextUp through a defined interface |
 
-The [read-only correspondence capability contract](CORRESPONDENCE_CAPABILITY.md) defines the proposed adapter requirements and maps them to the existing Gmail implementation.
+The [accepted read-only correspondence capability contract](CORRESPONDENCE_CAPABILITY.md) maps the adapter requirements to the existing Gmail implementation. Each adapter still needs conformance evidence, and each support claim needs evidence for its provider profile.
 
 ## Current state
 
