@@ -153,16 +153,16 @@ This remains the first connection to be completed and validated. It is not suppo
 
 ## Interoperability and onboarding
 
-The core preview requires no enabled integration. The maintainer's acceptance of the policy in #23 and the onboarding design in #28 precedes publication of the proposed core implementation issues. The other interoperability outcomes retain their existing dependencies. See the [work order](WORK_PROGRAM.md#work-order) and the open choices in [decision 0002](decisions/0002-standards-first-interoperability.md).
+The core preview requires no enabled integration. The maintainer accepted the policy tracked in #23. The proposed core implementation issues still depend on design acceptance in #28. The other interoperability outcomes retain their existing dependencies. See the [work order](WORK_PROGRAM.md#work-order) and the open choices in [decision 0002](decisions/0002-standards-first-interoperability.md).
 
-- [ ] **Outcome: the standards-first interoperability policy is accepted**
+- [x] **Outcome: the standards-first interoperability policy is accepted**
   - Tracking: [#23](https://github.com/westondunn/nextup-get-hired/issues/23)
   - Priority and dependencies: policy acceptance precedes the proposed core implementation issues. No prerequisite.
   - Suggested branch: `docs/23-standards-first-interoperability`
-  - Contributor notes: `docs/decisions/0002-standards-first-interoperability.md`; the direction is agreed and the overall record awaits maintainer acceptance
+  - Contributor notes: [decision 0002](decisions/0002-standards-first-interoperability.md) records the policy and the owner and review point for each deferred choice.
   - Contribution availability: maintainer-only
   - Complete when: the maintainer sets the record's status and the public documents contain none of the excluded claims
-  - Evidence: [PR #29](https://github.com/westondunn/nextup-get-hired/pull/29) recorded the agreed direction. [PR #69](https://github.com/westondunn/nextup-get-hired/pull/69) reconciled the subsequent decisions and documents. Final maintainer acceptance of decision 0002 is pending.
+  - Evidence: [PR #29](https://github.com/westondunn/nextup-get-hired/pull/29) recorded the agreed direction. [PR #69](https://github.com/westondunn/nextup-get-hired/pull/69) reconciled the subsequent decisions and documents. The maintainer accepted the amended policy on 2026-11-23 following the [review of public claims in the repository and wiki](decisions/0002-standards-first-interoperability.md#acceptance-review).
 
 - [ ] **Outcome: a shared read-only correspondence capability contract is defined**
   - Tracking: [#24](https://github.com/westondunn/nextup-get-hired/issues/24)
