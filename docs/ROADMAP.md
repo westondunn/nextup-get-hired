@@ -1,6 +1,8 @@
 # NextUp roadmap
 
-This page lists the planned outcomes. P0 and P1 are in order; the section added after them is not yet placed. It is public planning for a pre-release project. Outside contributions are not being accepted yet (see [CONTRIBUTING.md](../CONTRIBUTING.md)), so nothing here is an invitation to start work.
+This page lists the planned outcomes. P0 records the completed safety baseline. The [maintainer work program](WORK_PROGRAM.md) records execution prompts and proposed issue drafts without replacing the live issues or this roadmap. This is public planning for a pre-release project. Outside contributions are not being accepted yet (see [CONTRIBUTING.md](../CONTRIBUTING.md)), so nothing here is an invitation to start work.
+
+**Execution direction selected 2026-11-23 at `f9024aa`:** the next public milestone is a core-only preview with every integration and AI feature off. Google remains the first connection track, but it does not gate that milestone. Acceptance of the interoperability policy (#23) and core-onboarding design (#28) precedes publishing the proposed core children. The remaining provisional interoperability outcomes keep their existing dependencies and are not promoted into the core critical path by this decision.
 
 **Roadmap snapshot: 2026-11-14 at `c143b87`.** The interoperability and onboarding entries for #24, #26, #27 and #28 were reconciled against `main` at `bc536d1073f799da1efd2f7ccc8dae038be0e617`, covering the documentation delivered in PRs #65–#68. Status, scope and acceptance criteria live in the linked issues; where this page and an issue disagree, the issue is right. The parent tracking issue is [#3](https://github.com/westondunn/nextup-get-hired/issues/3). There is no GitHub Project for this repository.
 
