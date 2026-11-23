@@ -39,8 +39,9 @@ The exact assignment and any validation model are metadata in each [agent prompt
 
 ## Work order
 
-1. **Governance and truth:** accept or amend #23, #24, and #28; audit #10 evidence; reconcile the
-   live repository rules with the documents; make workflow lint cover every checked-in workflow.
+1. **Governance and truth.** The maintainer accepted the interoperability policy tracked in #23. Review
+   #24 and #28 for acceptance, audit #10 evidence, reconcile the live repository rules with the
+   documents, and make workflow lint cover every checked-in workflow.
 2. **Core public preview:** choose the first platform/packaging path, implement guided setup and
    in-application first run, fix the Today defect, establish the application accessibility
    baseline, prove the six core workflows with integrations off, then run separately approved
@@ -67,7 +68,7 @@ parallel only when it does not delay core evidence or weaken the off-by-default 
 | [#11](https://github.com/westondunn/nextup-get-hired/issues/11) | Implement lifecycle, test, reauthorization, disconnect/revocation, and preservation | [Connection lifecycle](prompts/open/11-google-connection-lifecycle.md) |
 | [#12](https://github.com/westondunn/nextup-get-hired/issues/12) | Extend the existing card after #11; do not rebuild PR #56 | [Settings lifecycle](prompts/open/12-google-settings-lifecycle.md) |
 | [#14](https://github.com/westondunn/nextup-get-hired/issues/14) | Keep blocked through #11, #12, guarded enablement, and live-account approval | [Clean-machine Google validation](prompts/open/14-google-clean-machine-validation.md) |
-| [#23](https://github.com/westondunn/nextup-get-hired/issues/23) | Prepare evidence, then stop for explicit acceptance or amendment | [Interoperability acceptance](prompts/open/23-interoperability-acceptance.md) |
+| [#23](https://github.com/westondunn/nextup-get-hired/issues/23) | The [policy is accepted](decisions/0002-standards-first-interoperability.md#acceptance-review). Present the issue update and closure for separate approval. | [Interoperability acceptance](prompts/open/23-interoperability-acceptance.md) |
 | [#24](https://github.com/westondunn/nextup-get-hired/issues/24) | Review the merged contract, then stop for explicit acceptance | [Correspondence contract acceptance](prompts/open/24-correspondence-contract-acceptance.md) |
 | [#25](https://github.com/westondunn/nextup-get-hired/issues/25) | After #24, evaluate Microsoft Graph, OAuth-capable IMAP, and JMAP consistently | [Second-adapter evaluation](prompts/open/25-second-email-adapter-evaluation.md) |
 | [#28](https://github.com/westondunn/nextup-get-hired/issues/28) | Accept or amend the design, close it as design work, then publish children selectively | [Onboarding acceptance](prompts/open/28-core-onboarding-acceptance.md) |
