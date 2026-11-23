@@ -17,7 +17,7 @@ Branch names below are suggestions that follow the [branching guide](BRANCHING.m
 - The API has no authentication and is published on the loopback interface only. It refuses requests to a non-local host name and cross-origin state-changing requests. Changing or running mail and calendar sync requires a local session, and so do the Google client and connection routes, except the address Google sends the browser back to. No other route does.
 - The optional external classifier interface is described in [CORRESPONDENCE_SYNC.md](CORRESPONDENCE_SYNC.md) and is refused in every environment.
 - There is no code for other mail or calendar providers (IMAP, SMTP, CalDAV, iCalendar), an AI provider, MCP, a workflow tool, Google Docs or first-run onboarding.
-- Nothing has a support status. [INTEGRATIONS.md](INTEGRATIONS.md) records each integration's implementation and support status separately.
+- Every integration has support status `None` in the [integration matrix](INTEGRATIONS.md).
 
 ## P0 — Tracking baseline and safety
 
@@ -55,7 +55,7 @@ Branch names below are suggestions that follow the [branching guide](BRANCHING.m
   - Contributor notes: decision record under `docs/`; browser security for local services
   - Contribution availability: maintainer-only
   - Complete when: the decision record is reviewed and merged
-  - Evidence: [decisions/0001-local-session-boundary.md](decisions/0001-local-session-boundary.md), merged in [#17](https://github.com/westondunn/nextup-get-hired/pull/17) as `6da6061` and accepted by the maintainer on 2026-11-13
+  - Evidence: [PR #17](https://github.com/westondunn/nextup-get-hired/pull/17) proposed decision 0001. The maintainer recorded acceptance on 2026-11-13 in [PR #19](https://github.com/westondunn/nextup-get-hired/pull/19) ([`6ef8a00`](https://github.com/westondunn/nextup-get-hired/commit/6ef8a0093ee74a7cfce7e8da85e8f0b63309b483)). The [accepted CSRF decision](decisions/0001-local-session-boundary.md#layer-2--cross-origin-refusal-state-changing-requests) uses Fetch Metadata and Origin checks and supersedes the per-request token criterion in #7.
 
 - [x] **Outcome: requests to a non-local host name and cross-origin state-changing requests are refused**
   - Tracking: [#8](https://github.com/westondunn/nextup-get-hired/issues/8)
@@ -86,7 +86,7 @@ This remains the first connection to be completed and validated. It is not suppo
   - Contributor notes: decision record under `docs/decisions/`; must cite current official Google documentation; the registration is user-owned, the client type is Web application, client credentials are entered in Settings, and the configuration refresh token stays as a fallback
   - Contribution availability: maintainer-only
   - Complete when: the decision record is reviewed and merged
-  - Evidence: [decisions/0003-google-connection.md](decisions/0003-google-connection.md), merged in [#46](https://github.com/westondunn/nextup-get-hired/pull/46) as `91aa6c7` and accepted by the maintainer on 2026-11-14; [hosted CI run on `main`](https://github.com/westondunn/nextup-get-hired/actions/runs/43668150428). Written from Google's documentation as read on that date; no live account was used, and the record lists what that leaves unverified
+  - Evidence: [PR #46](https://github.com/westondunn/nextup-get-hired/pull/46) proposed [decision 0003](decisions/0003-google-connection.md) from Google's documentation. [Hosted CI passed at `91aa6c7`](https://github.com/westondunn/nextup-get-hired/actions/runs/43668150428). The maintainer recorded acceptance on 2026-11-14 in [PR #47](https://github.com/westondunn/nextup-get-hired/pull/47) ([`bab594e`](https://github.com/westondunn/nextup-get-hired/commit/bab594ed87a4b97af05ff92268d36edd9973ef4e)). Live-account validation is pending.
 
 - [ ] **Outcome: a user can connect a Google account through the browser for read-only Gmail and Calendar**
   - Tracking: [#10](https://github.com/westondunn/nextup-get-hired/issues/10)
@@ -95,7 +95,7 @@ This remains the first connection to be completed and validated. It is not suppo
   - Contributor notes: `backend/app/sources/`, `backend/app/config.py`, a new migration; existing configuration refusals stay unless the decision record changes them
   - Contribution availability: maintainer-only
   - Complete when: the flow, its refusal paths and the migration round trip pass with mocked provider calls
-  - Evidence: pending
+  - Implementation evidence: [#51](https://github.com/westondunn/nextup-get-hired/pull/51) and [#52](https://github.com/westondunn/nextup-get-hired/pull/52) added encryption and the connection table. [#53](https://github.com/westondunn/nextup-get-hired/pull/53) and [#54](https://github.com/westondunn/nextup-get-hired/pull/54) added client saving, consent and callback. [#55](https://github.com/westondunn/nextup-get-hired/pull/55) connected sync to the stored grant, and [#56](https://github.com/westondunn/nextup-get-hired/pull/56) added the Settings card that starts consent. [Hosted CI passed at `4589435`](https://github.com/westondunn/nextup-get-hired/actions/runs/43777493105) with simulated Google responses. The review against #10's acceptance criteria is pending.
 
 - [ ] **Outcome: a user can check, renew and remove a Google connection**
   - Tracking: [#11](https://github.com/westondunn/nextup-get-hired/issues/11)
@@ -113,7 +113,7 @@ This remains the first connection to be completed and validated. It is not suppo
   - Contributor notes: `frontend/src/hub/SettingsView.tsx`; includes accessibility coverage
   - Contribution availability: maintainer-only
   - Complete when: each state has a tested rendering and the accessibility checks pass
-  - Evidence: pending
+  - Evidence: the [Settings card delivered for #10](https://github.com/westondunn/nextup-get-hired/pull/56) shows Google as unavailable in shipped configurations. The lifecycle states, actions and accessibility checks for #12 depend on #11.
 
 - [x] **Outcome: calendar import and display are tested across daylight-saving boundaries**
   - Tracking: [#13](https://github.com/westondunn/nextup-get-hired/issues/13)
@@ -151,18 +151,18 @@ This remains the first connection to be completed and validated. It is not suppo
   - Complete when: a dated clean-machine run is recorded for each platform claimed
   - Evidence: pending
 
-## Interoperability and onboarding (priority provisional)
+## Interoperability and onboarding
 
-These outcomes were added on 2026-11-13 to carry the direction in [decision 0002](decisions/0002-standards-first-interoperability.md). They have no agreed position relative to P0–P3, and nothing in P0 or P1 has been moved to make room for them. The linked decision record tracks which choices remain open.
+The core preview requires no enabled integration. The maintainer's acceptance of the policy in #23 and the onboarding design in #28 precedes publication of the proposed core implementation issues. The other interoperability outcomes retain their existing dependencies. See the [work order](WORK_PROGRAM.md#work-order) and the open choices in [decision 0002](decisions/0002-standards-first-interoperability.md).
 
 - [ ] **Outcome: the standards-first interoperability policy is accepted**
   - Tracking: [#23](https://github.com/westondunn/nextup-get-hired/issues/23)
-  - Priority and dependencies: provisional; none
+  - Priority and dependencies: policy acceptance precedes the proposed core implementation issues. No prerequisite.
   - Suggested branch: `docs/23-standards-first-interoperability`
   - Contributor notes: `docs/decisions/0002-standards-first-interoperability.md`; the direction is agreed and the overall record awaits maintainer acceptance
   - Contribution availability: maintainer-only
   - Complete when: the maintainer sets the record's status and the public documents contain none of the excluded claims
-  - Evidence: pending
+  - Evidence: [PR #29](https://github.com/westondunn/nextup-get-hired/pull/29) recorded the agreed direction. [PR #69](https://github.com/westondunn/nextup-get-hired/pull/69) reconciled the subsequent decisions and documents. Final maintainer acceptance of decision 0002 is pending.
 
 - [ ] **Outcome: a shared read-only correspondence capability contract is defined**
   - Tracking: [#24](https://github.com/westondunn/nextup-get-hired/issues/24)
@@ -202,11 +202,11 @@ These outcomes were added on 2026-11-13 to carry the direction in [decision 0002
 
 - [ ] **Outcome: first-run setup of the core application is guided and validated, with no integration or AI**
   - Tracking: [#28](https://github.com/westondunn/nextup-get-hired/issues/28)
-  - Priority and dependencies: provisional; follows [#23](https://github.com/westondunn/nextup-get-hired/issues/23)
+  - Priority and dependencies: design acceptance follows [#23](https://github.com/westondunn/nextup-get-hired/issues/23) and precedes publication of the proposed core implementation issues.
   - Suggested branch: `docs/28-core-onboarding-design`
   - Contributor notes: design first; no packaging approach chosen in advance; migration confirmation, secret files and loopback exposure are not weakened
   - Contribution availability: maintainer-only
-  - Complete when: the design is accepted, and clean-machine and representative-user validation are recorded separately from their targets
+  - Complete when: the maintainer accepts the design in #28 and the later [core release checks](RELEASE_CHECKLIST.md#core-application) record clean-machine and representative-user results separately from their targets.
   - Evidence: [the proposed first-run design](CORE_ONBOARDING.md) merged in [PR #68](https://github.com/westondunn/nextup-get-hired/pull/68) ([`bc536d1`](https://github.com/westondunn/nextup-get-hired/commit/bc536d1073f799da1efd2f7ccc8dae038be0e617)). Maintainer acceptance in [#28](https://github.com/westondunn/nextup-get-hired/issues/28), implementation, clean-machine runs and representative-user sessions remain pending.
 
 ## P2 — Optional workflow access (planned, not yet tracked)
