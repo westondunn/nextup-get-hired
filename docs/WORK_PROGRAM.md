@@ -69,8 +69,7 @@ parallel only when it does not delay core evidence or weaken the off-by-default 
 | [#11](https://github.com/westondunn/nextup-get-hired/issues/11) | Implement lifecycle, test, reauthorization, disconnect/revocation, and preservation | [Connection lifecycle](prompts/open/11-google-connection-lifecycle.md) |
 | [#12](https://github.com/westondunn/nextup-get-hired/issues/12) | Extend the existing card after #11; do not rebuild PR #56 | [Settings lifecycle](prompts/open/12-google-settings-lifecycle.md) |
 | [#14](https://github.com/westondunn/nextup-get-hired/issues/14) | Keep blocked through #11, #12, guarded enablement, and live-account approval | [Clean-machine Google validation](prompts/open/14-google-clean-machine-validation.md) |
-| [#24](https://github.com/westondunn/nextup-get-hired/issues/24) | The [contract is accepted](CORRESPONDENCE_CAPABILITY.md). Present the issue update and closure for separate approval. | [Correspondence contract acceptance](prompts/open/24-correspondence-contract-acceptance.md) |
-| [#25](https://github.com/westondunn/nextup-get-hired/issues/25) | After #24 closes, evaluate Microsoft Graph, OAuth-capable IMAP, and JMAP against the accepted contract. Deferral is an option. | [Second-adapter evaluation](prompts/open/25-second-email-adapter-evaluation.md) |
+| [#25](https://github.com/westondunn/nextup-get-hired/issues/25) | Evaluate Microsoft Graph, OAuth-capable IMAP, and JMAP against the [accepted contract](CORRESPONDENCE_CAPABILITY.md). Deferral is an option. | [Second-adapter evaluation](prompts/open/25-second-email-adapter-evaluation.md) |
 | [#28](https://github.com/westondunn/nextup-get-hired/issues/28) | Accept or amend the design, close it as design work, then publish children selectively | [Onboarding acceptance](prompts/open/28-core-onboarding-acceptance.md) |
 
 ## Proposed issue drafts

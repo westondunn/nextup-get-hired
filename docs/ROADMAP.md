@@ -175,7 +175,7 @@ The core preview requires no enabled integration. The maintainer accepted the po
 
 - [ ] **Outcome: a second, independent email adapter has been evaluated**
   - Tracking: [#25](https://github.com/westondunn/nextup-get-hired/issues/25)
-  - Priority and dependencies: provisional. Evaluation uses the [accepted correspondence contract](CORRESPONDENCE_CAPABILITY.md). GitHub tracks [#24](https://github.com/westondunn/nextup-get-hired/issues/24) as the blocking issue.
+  - Priority and dependencies: provisional. The maintainer completed [#24](https://github.com/westondunn/nextup-get-hired/issues/24#issuecomment-7118773304). The [accepted correspondence contract](CORRESPONDENCE_CAPABILITY.md) supplies the evaluation criteria.
   - Suggested branch: `docs/25-second-email-adapter-evaluation`
   - Contributor notes: bounded discovery; no provider or protocol chosen in advance; no implementation
   - Contribution availability: maintainer-only
