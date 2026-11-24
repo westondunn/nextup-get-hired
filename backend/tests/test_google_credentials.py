@@ -651,6 +651,7 @@ def test_invalid_grant_marks_only_the_exact_current_stored_grant(short, stale):
         short.lifecycle.generation = uuid4()
     elif stale == "epoch":
         short.lifecycle.epoch = uuid4()
+        short.row.client_secret_sealed = seal("new-synthetic-client-secret", CLIENT_SECRET_PURPOSE)
     tokens = Tokens(httpx.Response(400, json={"error": "invalid_grant"}))
     with tokens.client() as client, pytest.raises(SourceError) as caught:
         access_token(client, MagicMock(), STORED_ONLY, credentials, "gmail")
@@ -678,3 +679,36 @@ def test_invalid_grant_due_to_explicit_admin_policy_keeps_the_grant(short):
         access_token(client, MagicMock(), STORED_ONLY, credentials, "gmail")
     assert caught.value.code == "admin_restricted"
     assert short.row.state == "connected" and short.events == []
+
+
+def test_resaving_the_same_client_secret_preserves_a_rotation_of_the_current_grant(short):
+    credentials = stored_credentials(short.row)
+    short.lifecycle.epoch = uuid4()
+    short.row.client_secret_sealed = seal("new-synthetic-client-secret", CLIENT_SECRET_PURPOSE)
+    tokens = Tokens(refresh_token=ISSUED)
+    with tokens.client() as client:
+        assert access_token(client, MagicMock(), STORED_ONLY, credentials, "gmail")
+    assert opened(short.row) == ISSUED and short.row.state == "connected"
+
+
+@pytest.mark.parametrize("refusal_first", [True, False])
+def test_concurrent_refreshes_keep_the_rotated_token_in_both_response_orders(short, refusal_first):
+    # Both workers already resolved the same original grant before either response arrived.
+    successful = stored_credentials(short.row)
+    refused = stored_credentials(short.row)
+    rotation = Tokens(refresh_token=ISSUED)
+    rejection = Tokens(httpx.Response(400, json={"error": "invalid_grant"}))
+    for reject in (refusal_first, not refusal_first):
+        if reject:
+            with rejection.client() as client, pytest.raises(SourceError) as caught:
+                access_token(client, MagicMock(), STORED_ONLY, refused, "gmail")
+            if refusal_first:
+                assert caught.value.code == "needs_reauthorization"
+                assert short.row.state == "needs_reauthorization"
+            else:
+                assert caught.value.code == "provider_rejected"
+        else:
+            with rotation.client() as client:
+                assert access_token(client, MagicMock(), STORED_ONLY, successful, "gmail")
+    assert opened(short.row) == ISSUED
+    assert short.row.state == "connected"

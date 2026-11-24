@@ -202,6 +202,19 @@ class _Attempt:
             setattr(row, self.capability + "_last_success_at", now)
 
 
+def correspondence_status(code: str) -> str:
+    """The correspondence API's original HTTP error vocabulary."""
+    return {"admin_restricted": "unauthorized", "admin_policy_rejected": "provider_rejected"}.get(
+        code, code
+    )
+
+
+def _failure(attempt: _Attempt, error: SourceError, imported: int) -> dict:
+    code = error.attempt_code if isinstance(error, gmail.AdminRestriction) else error.code
+    attempt.record(code, error.message, imported)
+    return {"status": correspondence_status(code), "imported": imported, "error": error.message}
+
+
 def _classification_query(attempt: _Attempt):
     query = select(Communication).where(
         Communication.source == SOURCE,
@@ -309,7 +322,10 @@ def _sync(
             credentials = google_credentials.resolve(
                 session, settings, capability, lifecycle=lifecycle
             )
-            if (credentials.epoch, credentials.generation) != (attempt.epoch, attempt.generation):
+            if (credentials.stored_as is not None) != (attempt.generation is not None) or (
+                credentials.epoch,
+                credentials.generation,
+            ) != (attempt.epoch, attempt.generation):
                 raise _ObsoleteSync
             attempt.current()
             with (
@@ -325,8 +341,7 @@ def _sync(
                 else:
                     result = _import_calendar(attempt, http, token, now)
         except SourceError as exc:
-            attempt.record(exc.code, exc.message, 0)
-            return {"status": exc.code, "imported": 0, "error": exc.message}
+            return _failure(attempt, exc, 0)
         if intake and result["status"] == "ok":
             from app import application_intake
 
@@ -480,8 +495,7 @@ def _import_gmail(attempt: _Attempt, client: httpx.Client, token: str, now: date
         imported += 1
         newest = max(newest or 0, int(message.received_at.timestamp()))
     if failure is not None:
-        attempt.record(failure.code, failure.message, imported)
-        return {"status": failure.code, "imported": imported, "error": failure.message}
+        return _failure(attempt, failure, imported)
     complete = complete and len(pending) <= len(batch)
     if complete:
         config.cursor_epoch = newest

@@ -121,7 +121,12 @@ def _connection_session(session: Session) -> Session:
 
 
 def _update_current_grant(
-    session: Session, settings: Settings, credentials: Credentials, *, replacement: str | None
+    session: Session,
+    settings: Settings,
+    credentials: Credentials,
+    *,
+    replacement: str | None,
+    access_issued: bool = False,
 ) -> bool:
     """Rotate a token, or mark a definite invalid grant, only if the original is current."""
     if credentials.stored_as is None:
@@ -129,21 +134,29 @@ def _update_current_grant(
     try:
         with _connection_session(session) as short, short.begin():
             lifecycle = google_lifecycle.lifecycle_row(short, lock=True)
-            if (
-                lifecycle.generation != credentials.generation
-                or lifecycle.epoch != credentials.epoch
-            ):
+            if lifecycle.generation != credentials.generation:
+                return False
+            # Saving the same client again changes its secret and consent epoch, but keeps
+            # the grant. Preserve an actual rotation of that exact grant; a refusal using
+            # the earlier client secret must never disable the current connection.
+            if replacement is None and lifecycle.epoch != credentials.epoch:
                 return False
             row = short.get(GoogleConnection, 1, with_for_update=True, populate_existing=True)
             if (
                 row is None
-                or row.state != "connected"
+                or row.state not in ("connected", "needs_reauthorization")
                 or row.refresh_token_sealed != credentials.stored_as
             ):
                 return False
             if replacement is None:
+                if row.state == "needs_reauthorization":
+                    return True
                 row.state = "needs_reauthorization"
             else:
+                # The provider can invalidate the old token on rotation. If an overlapping
+                # refresh of that token failed first, this successful rotation supersedes it.
+                if access_issued:
+                    row.state = "connected"
                 row.refresh_token_sealed = token_vault.seal(
                     replacement, purpose=REFRESH_TOKEN_PURPOSE, settings=settings
                 )
@@ -159,7 +172,14 @@ def keep_new_refresh_token(
 ) -> None:
     issued = payload.get("refresh_token")
     if isinstance(issued, str) and issued != credentials.refresh_token and TOKEN.fullmatch(issued):
-        _update_current_grant(session, settings, credentials, replacement=issued)
+        access = payload.get("access_token")
+        _update_current_grant(
+            session,
+            settings,
+            credentials,
+            replacement=issued,
+            access_issued=isinstance(access, str) and TOKEN.fullmatch(access) is not None,
+        )
 
 
 def refresh_refusal(

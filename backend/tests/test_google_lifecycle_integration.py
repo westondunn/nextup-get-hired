@@ -1,13 +1,17 @@
 """Google lifecycle behavior across PostgreSQL sessions with synthetic provider responses."""
 
 import os
+from datetime import UTC, datetime
 from urllib.parse import parse_qs, urlsplit
 from uuid import uuid4
 
 import httpx
 import pytest
 from pydantic import SecretStr
+from sqlalchemy import select
 from sqlalchemy.orm import Session
+from test_gmail import FakeGmail, message_payload
+from test_google_calendar import FakeCalendar, event_payload
 from test_google_connection_integration import (
     BOTH_ON,
     CLIENT_ID,
@@ -15,6 +19,7 @@ from test_google_connection_integration import (
     FIRST_ADDRESS,
     HOST,
     REFRESH_TOKEN,
+    SECOND_ADDRESS,
     token_response,
 )
 from test_google_connection_integration import connect as _connect
@@ -26,7 +31,14 @@ from app import correspondence, google_connection, google_credentials, google_li
 from app.correspondence_tasks import sync_calendar, sync_gmail
 from app.google_connection import REFRESH_TOKEN_PURPOSE
 from app.google_consent import CALLBACK_PATH
-from app.models import Communication, Contact, GoogleConnection, Pursuit
+from app.models import (
+    Communication,
+    Contact,
+    CorrespondenceSyncSettings,
+    EmailClassification,
+    GoogleConnection,
+    Pursuit,
+)
 from app.sources import gmail, google_calendar, google_oauth
 from app.sources.common import SourceError
 
@@ -221,3 +233,149 @@ def test_invalid_grant_marks_only_the_current_generation(connected_lifecycle, pr
         report = client.get(CONNECTION_PATH).json()
         assert report["state"] == expected_state
     assert all(not status["active"] for status in report["sync"].values())
+
+
+def test_admitted_result_cannot_import_after_disconnect(
+    connected_lifecycle, profile_database, monkeypatch
+):
+    engine, _ = profile_database
+    client, _ = connected_lifecycle
+    fake = FakeGmail([message_payload("late", "team@example.test", "Synthetic", "", 1700000000000)])
+    monkeypatch.setattr(
+        "app.google_actions._http_client",
+        lambda: httpx.AsyncClient(transport=httpx.MockTransport(lambda _: httpx.Response(200))),
+    )
+
+    def provider(request):
+        if request.url.path.endswith("/messages/late"):
+            # This independent lifecycle action must finish while the worker still owns
+            # the sync-settings lock and waits on the admitted provider call.
+            result = client.delete(CONNECTION_PATH)
+            assert result.status_code == 200 and result.json()["result"] == "disconnected"
+        return fake.handler(request)
+
+    with (
+        Session(engine) as session,
+        session.begin(),
+        httpx.Client(transport=httpx.MockTransport(provider)) as http,
+    ):
+        assert sync_gmail(session, BOTH_ON, http, intake=True) == {
+            "status": "disabled",
+            "imported": 0,
+        }
+    with Session(engine) as observer:
+        assert observer.scalars(select(Communication)).all() == []
+        config = observer.get(CorrespondenceSyncSettings, 1)
+        assert config.cursor_epoch is config.last_run_at is None
+        row = google_lifecycle.lifecycle_row(observer)
+        assert row.sync_paused and row.gmail_attempt_generation is row.gmail_last_success_at is None
+
+
+def test_replacement_leaves_legacy_rows_classifier_and_user_decisions_untouched(
+    connected_lifecycle, profile_database
+):
+    engine, _ = profile_database
+    client, google = connected_lifecycle
+    past = datetime(2020, 1, 1, tzinfo=UTC)
+    legacy_mail, confirmation, legacy_event = (uuid4() for _ in range(3))
+    with Session(engine) as session, session.begin():
+        config = session.get(CorrespondenceSyncSettings, 1)
+        config.auto_create_applications = True
+        config.cursor_epoch = 123
+        session.add_all(
+            [
+                Communication(
+                    id=legacy_mail,
+                    source="gmail",
+                    source_id="collision",
+                    direction="inbound",
+                    status="dismissed",
+                    sender=SECOND_ADDRESS,
+                    subject="Edited subject",
+                    body="Edited body",
+                    created_at=past,
+                ),
+                Communication(
+                    id=confirmation,
+                    source="gmail",
+                    source_id="old-confirmation",
+                    direction="inbound",
+                    status="received",
+                    created_at=past,
+                    detection={
+                        "v": 2,
+                        "kind": "application_confirmation",
+                        "confidence": "high",
+                        "company": "Synthetic",
+                        "title": "Old role",
+                    },
+                ),
+                Communication(
+                    id=legacy_event,
+                    source="calendar",
+                    source_id="collision",
+                    direction="note",
+                    status="dismissed",
+                    notes="Edited notes",
+                    subject="Edited event",
+                    created_at=past,
+                ),
+                EmailClassification(
+                    gmail_message_id="new", classification="opportunity", classified_at=past
+                ),
+            ]
+        )
+
+    google.token = token_response("synthetic-replacement", f"{gmail.SCOPE} {google_calendar.SCOPE}")
+    google.profile = httpx.Response(200, json={"emailAddress": SECOND_ADDRESS})
+    google.calendar = httpx.Response(200, json={"id": SECOND_ADDRESS})
+    assert _connect(client).headers["location"] == "/?google=connected"
+    fake_mail = FakeGmail(
+        [
+            message_payload(key, "team@example.test", "Synthetic", "", 1700000000000)
+            for key in ("collision", "new")
+        ],
+        owner=SECOND_ADDRESS,
+    )
+    fake_calendar = FakeCalendar(
+        [event_payload("collision", "Another mailbox", "2026-11-24T12:00:00Z")]
+    )
+    for expected in (1, 0):
+        with Session(engine) as session, session.begin(), fake_mail.client() as http:
+            result = sync_gmail(session, BOTH_ON, http, intake=True)
+            assert result["imported"] == expected and result["applications"]["created"] == 0
+        with Session(engine) as session, session.begin(), fake_calendar.client() as http:
+            assert sync_calendar(session, BOTH_ON, http) == {
+                "status": "ok",
+                "imported": 0,
+                "updated": 0,
+            }
+    assert not any(request.url.path.endswith("/profile") for request in fake_mail.requests)
+    assert all(
+        "after:123" not in r.url.params["q"] for r in fake_mail.requests if "q" in r.url.params
+    )
+    with Session(engine) as observer:
+        mail = observer.get(Communication, legacy_mail)
+        assert (mail.direction, mail.status, mail.subject, mail.body, mail.detection) == (
+            "inbound",
+            "dismissed",
+            "Edited subject",
+            "Edited body",
+            None,
+        )
+        assert observer.get(Communication, confirmation).pursuit_id is None
+        event = observer.get(Communication, legacy_event)
+        assert (event.subject, event.status, event.notes, event.detection) == (
+            "Edited event",
+            "dismissed",
+            "Edited notes",
+            None,
+        )
+        assert observer.get(EmailClassification, "new").applied_at is None
+        lifecycle = google_lifecycle.lifecycle_row(observer)
+        assert lifecycle.gmail_last_success_at is lifecycle.calendar_last_success_at is None
+        assert (
+            lifecycle.gmail_attempt_generation
+            == lifecycle.calendar_attempt_generation
+            == lifecycle.generation
+        )

@@ -104,7 +104,7 @@ This remains the first connection to be completed and validated. It is not suppo
   - Contributor notes: `backend/app/correspondence.py`, `backend/app/correspondence_tasks.py`
   - Contribution availability: maintainer-only
   - Complete when: every connection state, including revoked and unreachable, is tested
-  - Evidence: pending
+  - Backend implementation and synthetic verification: [PR #78](https://github.com/westondunn/nextup-get-hired/pull/78). The full Settings experience and clean-machine provider checks have separate gates.
 
 - [ ] **Outcome: Settings shows the Google connection state and actions**
   - Tracking: [#12](https://github.com/westondunn/nextup-get-hired/issues/12)

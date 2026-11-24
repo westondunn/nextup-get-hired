@@ -51,6 +51,14 @@ def credentials_present(settings: Settings) -> bool:
     )
 
 
+class AdminRestriction(SourceError):
+    """Keep the HTTP failure category for callers of the original sync API."""
+
+    def __init__(self, status: int):
+        super().__init__("admin_restricted", "Google access is restricted by an administrator.")
+        self.attempt_code = "admin_policy_rejected" if status == 400 else "admin_restricted"
+
+
 def response_json(response: httpx.Response, *, refresh: bool = False) -> dict:
     """Read a Google API result. Only documented machine-readable error fields are used."""
     if response.status_code in (400, 401, 403):
@@ -76,9 +84,7 @@ def response_json(response: httpx.Response, *, refresh: bool = False) -> dict:
                         if isinstance(item, dict) and isinstance(item.get("reason"), str)
                     )
         if reasons & {"admin_policy_enforced", "domainPolicy", "ORG_RESTRICTION_VIOLATION"}:
-            raise SourceError(
-                "admin_restricted", "Google access is restricted by an administrator."
-            )
+            raise AdminRestriction(response.status_code)
         if refresh and response.status_code == 400 and error == "invalid_grant":
             raise SourceError("invalid_grant", "Google rejected the refresh grant.")
         if reasons & {

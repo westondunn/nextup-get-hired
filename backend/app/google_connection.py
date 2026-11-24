@@ -117,6 +117,7 @@ ATTEMPT_STATUS = {
     "capability_not_granted": "wrong_scope",
     "wrong_scope": "wrong_scope",
     "admin_restricted": "admin_restricted",
+    "admin_policy_rejected": "admin_restricted",
     "network_error": "temporarily_unavailable",
     "provider_unavailable": "temporarily_unavailable",
     "temporarily_unavailable": "temporarily_unavailable",

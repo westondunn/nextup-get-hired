@@ -183,6 +183,9 @@ def test_connection(session: Database):
                 "needs_reauthorization": "needs_reauthorization",
             }.get(error.code, "connection_error")
             raise _refusal(code) from None
+        if credentials.stored_as is None:
+            # Test is for a managed grant only, even if a local record changed after status.
+            raise _refusal("configured_externally")
         session.rollback()  # Release the read transaction before contacting the provider.
         asyncio.run(_test_grant(session, settings, credentials, applicable, results))
         return {

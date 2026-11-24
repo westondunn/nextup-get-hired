@@ -14,7 +14,12 @@ from sqlalchemy.orm import Session
 from app import google_credentials, google_lifecycle
 from app.application_intake import ensure_review_rule
 from app.config import get_settings
-from app.correspondence_tasks import review_count, sync_calendar_task, sync_gmail_task
+from app.correspondence_tasks import (
+    correspondence_status,
+    review_count,
+    sync_calendar_task,
+    sync_gmail_task,
+)
 from app.db import get_session
 from app.followup_tasks import INBOUND_REPLY_RULE
 from app.local_session import require_session
@@ -77,14 +82,16 @@ def _out(config: CorrespondenceSyncSettings | None, session: Session) -> dict:
         "calendar_credentials_present": google_credentials.usable(session, settings, "calendar"),
         "interval_seconds": settings.gmail_sync_interval_seconds,
         "last_run_at": config.last_run_at if config else None,
-        "last_status": config.last_status if config else "not_run",
+        "last_status": correspondence_status(config.last_status) if config else "not_run",
         "last_error": config.last_error if config else "",
         "last_imported": config.last_imported if config else 0,
         "cursor_epoch": config.cursor_epoch if config else None,
         "calendar_live_enabled": settings.calendar_sync_enabled,
         "calendar_interval_seconds": settings.calendar_sync_interval_seconds,
         "calendar_last_run_at": config.calendar_last_run_at if config else None,
-        "calendar_last_status": config.calendar_last_status if config else "not_run",
+        "calendar_last_status": correspondence_status(config.calendar_last_status)
+        if config
+        else "not_run",
         "calendar_last_error": config.calendar_last_error if config else "",
         "calendar_last_imported": config.calendar_last_imported if config else 0,
         "review_count": review_count(session),
