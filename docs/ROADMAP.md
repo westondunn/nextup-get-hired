@@ -153,7 +153,7 @@ This remains the first connection to be completed and validated. It is not suppo
 
 ## Interoperability and onboarding
 
-The core preview requires no enabled integration. The maintainer accepted the policy tracked in #23. The proposed core implementation issues still depend on design acceptance in #28. The other interoperability outcomes retain their existing dependencies. See the [work order](WORK_PROGRAM.md#work-order) and the open choices in [decision 0002](decisions/0002-standards-first-interoperability.md).
+The core preview requires no enabled integration. The maintainer accepted the interoperability policy tracked in #23 and the core first-run design tracked in #28. The proposed core implementation issues await separate publication decisions. The other interoperability outcomes retain their existing dependencies. See the [work order](WORK_PROGRAM.md#work-order) and the open choices in [decision 0002](decisions/0002-standards-first-interoperability.md).
 
 - [x] **Outcome: the standards-first interoperability policy is accepted**
   - Tracking: [#23](https://github.com/westondunn/nextup-get-hired/issues/23)
@@ -207,7 +207,7 @@ The core preview requires no enabled integration. The maintainer accepted the po
   - Contributor notes: design first; no packaging approach chosen in advance; migration confirmation, secret files and loopback exposure are not weakened
   - Contribution availability: maintainer-only
   - Complete when: the maintainer accepts the design in #28 and the later [core release checks](RELEASE_CHECKLIST.md#core-application) record clean-machine and representative-user results separately from their targets.
-  - Evidence: [the proposed first-run design](CORE_ONBOARDING.md) merged in [PR #68](https://github.com/westondunn/nextup-get-hired/pull/68) ([`bc536d1`](https://github.com/westondunn/nextup-get-hired/commit/bc536d1073f799da1efd2f7ccc8dae038be0e617)). Maintainer acceptance in [#28](https://github.com/westondunn/nextup-get-hired/issues/28), implementation, clean-machine runs and representative-user sessions remain pending.
+  - Evidence: the proposal for the [core first-run design](CORE_ONBOARDING.md) merged in [PR #68](https://github.com/westondunn/nextup-get-hired/pull/68) ([`bc536d1`](https://github.com/westondunn/nextup-get-hired/commit/bc536d1073f799da1efd2f7ccc8dae038be0e617)). On 2026-11-23 the maintainer accepted the design with clarifications on installation recovery and testing from an empty workspace. Implementation, accessible workflow evidence, clean-machine runs and representative-user sessions remain pending.
 
 ## P2 — Optional workflow access (planned, not yet tracked)
 

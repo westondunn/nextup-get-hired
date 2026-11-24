@@ -6,7 +6,7 @@ These are the gates that must be met before NextUp, or any of its integrations, 
 
 ## Core application
 
-The [core first-run design](CORE_ONBOARDING.md#validation) defines the workflow, platform, user-session and accessibility coverage. Link dated results as evidence becomes available.
+The maintainer accepted the [core first-run design](CORE_ONBOARDING.md#validation) tracked in [#28](https://github.com/westondunn/nextup-get-hired/issues/28). The gates below require dated workflow, platform and user-session results, with accessibility evidence for each new screen. Link each validation issue and its results when available.
 
 - [ ] The core workflows work with no external service, model credential, integration or optional tool configured, shown by a recorded run that lists the workflows exercised ([#28](https://github.com/westondunn/nextup-get-hired/issues/28)). Evidence: pending.
 - [ ] The guided setup has been followed on a clean machine, with a dated record for each platform claimed ([#28](https://github.com/westondunn/nextup-get-hired/issues/28)). Evidence: pending.

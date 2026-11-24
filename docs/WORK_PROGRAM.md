@@ -39,8 +39,8 @@ The exact assignment and any validation model are metadata in each [agent prompt
 
 ## Work order
 
-1. **Governance and truth.** The maintainer accepted the interoperability policy tracked in #23 and
-   the correspondence contract tracked in #24. Review #28 for acceptance, audit #10 evidence,
+1. **Governance and truth.** The maintainer accepted the interoperability policy (#23), the
+   correspondence contract (#24), and the core first-run design (#28). Audit #10 evidence,
    reconcile the live repository rules with the documents, and make workflow lint cover every
    checked-in workflow.
 2. **Core public preview:** choose the first platform/packaging path, implement guided setup and
@@ -70,7 +70,7 @@ parallel only when it does not delay core evidence or weaken the off-by-default 
 | [#12](https://github.com/westondunn/nextup-get-hired/issues/12) | Extend the existing card after #11; do not rebuild PR #56 | [Settings lifecycle](prompts/open/12-google-settings-lifecycle.md) |
 | [#14](https://github.com/westondunn/nextup-get-hired/issues/14) | Keep blocked through #11, #12, guarded enablement, and live-account approval | [Clean-machine Google validation](prompts/open/14-google-clean-machine-validation.md) |
 | [#25](https://github.com/westondunn/nextup-get-hired/issues/25) | Evaluate Microsoft Graph, OAuth-capable IMAP, and JMAP against the [accepted contract](CORRESPONDENCE_CAPABILITY.md). Deferral is an option. | [Second-adapter evaluation](prompts/open/25-second-email-adapter-evaluation.md) |
-| [#28](https://github.com/westondunn/nextup-get-hired/issues/28) | Accept or amend the design, close it as design work, then publish children selectively | [Onboarding acceptance](prompts/open/28-core-onboarding-acceptance.md) |
+| [#28](https://github.com/westondunn/nextup-get-hired/issues/28) | The [design is accepted](CORE_ONBOARDING.md). Review the completion evidence and closure. Proposed implementation issues await separate publication approval. | [Onboarding acceptance](prompts/open/28-core-onboarding-acceptance.md) |
 
 ## Proposed issue drafts
 
