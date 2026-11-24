@@ -165,6 +165,8 @@ def test_the_running_stack_refuses_to_store_a_google_client():
     with httpx.Client(base_url="http://api:8000", timeout=20) as client:
         assert client.get("/api/google/connection").status_code == 401
         assert client.put("/api/google/client", json=client_body).status_code == 401
+        assert client.post("/api/google/connection/test").status_code == 401
+        assert client.delete("/api/google/connection").status_code == 401
         assert client.post("/api/google/connect", data={"capability": "gmail"}).status_code == 401
         assert client.post("/api/session", json={"code": code}).status_code == 204
         try:
@@ -177,7 +179,25 @@ def test_the_running_stack_refuses_to_store_a_google_client():
                 "enabled_capabilities": [],
                 "granted_capabilities": [],
                 "account_address": None,
+                "credential_source": "none",
+                "sync": {
+                    name: {
+                        "active": False,
+                        "freshness": "inactive",
+                        "last_success_at": None,
+                        "last_attempt_at": None,
+                        "last_status": "not_run",
+                    }
+                    for name in ("gmail", "calendar")
+                },
             }
+            probe = client.post("/api/google/connection/test")
+            assert (probe.status_code, probe.json()["detail"]["code"]) == (409, "fixture_mode")
+            removed = client.delete("/api/google/connection").json()
+            assert (removed["result"], removed["revocation"]) == (
+                "already_disconnected",
+                "not_applicable",
+            )
             refused = client.put("/api/google/client", json=client_body)
             assert refused.status_code == 409
             assert client_body["client_secret"] not in refused.text

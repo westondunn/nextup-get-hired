@@ -12,15 +12,16 @@ Nothing here logs, and no error carries a credential.
 
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from uuid import UUID
 
 import httpx
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
-from app import token_vault
+from app import google_lifecycle, token_vault
 from app.config import Settings
 from app.google_connection import CLIENT_SECRET_PURPOSE, KEY_VERSION, REFRESH_TOKEN_PURPOSE
-from app.models import GoogleConnection
+from app.models import GoogleConnection, GoogleLifecycle
 from app.sources import gmail, google_calendar
 from app.sources.common import SourceError, require_live_requests
 from app.sources.google_oauth import CAPABILITY_SCOPES, TOKEN
@@ -56,15 +57,25 @@ class Credentials:
     refresh_token: str
     # The sealed form the refresh token was read from; ``None`` for the fallback.
     stored_as: str | None = None
+    epoch: UUID | None = None
+    generation: UUID | None = None
 
 
-def resolve(session: Session, settings: Settings, capability: str) -> Credentials:
+def resolve(
+    session: Session,
+    settings: Settings,
+    capability: str,
+    *,
+    lifecycle: GoogleLifecycle | None = None,
+) -> Credentials:
     """The credentials for one capability, or a ``SourceError`` saying why there are none.
 
     Contacts nothing. In fixture data mode it refuses before any credential is opened.
     """
     require_live_requests(settings)
-    row = session.get(GoogleConnection, 1)
+    if lifecycle is None:
+        lifecycle = google_lifecycle.lifecycle_row(session)
+    row = session.get(GoogleConnection, 1, populate_existing=True)
     if row is None or row.refresh_token_sealed is None:
         if not gmail.credentials_present(settings):
             raise SourceError("not_connected", NOT_CONNECTED)
@@ -72,6 +83,7 @@ def resolve(session: Session, settings: Settings, capability: str) -> Credential
             client_id=settings.google_oauth_client_id.get_secret_value(),
             client_secret=settings.google_oauth_client_secret.get_secret_value(),
             refresh_token=settings.gmail_refresh_token.get_secret_value(),
+            epoch=lifecycle.epoch,
         )
     if row.state != "connected":
         raise SourceError("needs_reauthorization", NEEDS_REAUTHORIZATION)
@@ -87,6 +99,8 @@ def resolve(session: Session, settings: Settings, capability: str) -> Credential
                 row.refresh_token_sealed, purpose=REFRESH_TOKEN_PURPOSE, settings=settings
             ),
             stored_as=row.refresh_token_sealed,
+            epoch=lifecycle.epoch,
+            generation=lifecycle.generation,
         )
     except token_vault.VaultError:
         raise SourceError("connection_unreadable", UNREADABLE) from None
@@ -106,34 +120,58 @@ def _connection_session(session: Session) -> Session:
     return Session(session.get_bind())
 
 
-def _keep_new_refresh_token(
-    session: Session, settings: Settings, credentials: Credentials, payload: dict
-) -> None:
-    """Store a refresh token that Google issued in place of the one just used.
-
-    The change is made under the connection's row lock, in a transaction of its own, so
-    the lock is not held for the rest of the sync. It is made only if the stored token is
-    still the one that was used: a connection replaced in the meantime is left alone.
-    """
-    issued = payload.get("refresh_token")
-    if credentials.stored_as is None or not isinstance(issued, str):
-        return
-    if issued == credentials.refresh_token or not TOKEN.fullmatch(issued):
-        return
+def _update_current_grant(
+    session: Session, settings: Settings, credentials: Credentials, *, replacement: str | None
+) -> bool:
+    """Rotate a token, or mark a definite invalid grant, only if the original is current."""
+    if credentials.stored_as is None:
+        return False
     try:
         with _connection_session(session) as short, short.begin():
+            lifecycle = google_lifecycle.lifecycle_row(short, lock=True)
+            if (
+                lifecycle.generation != credentials.generation
+                or lifecycle.epoch != credentials.epoch
+            ):
+                return False
             row = short.get(GoogleConnection, 1, with_for_update=True, populate_existing=True)
-            if row is None or row.refresh_token_sealed != credentials.stored_as:
-                return
-            row.refresh_token_sealed = token_vault.seal(
-                issued, purpose=REFRESH_TOKEN_PURPOSE, settings=settings
-            )
-            row.key_version = KEY_VERSION
+            if (
+                row is None
+                or row.state != "connected"
+                or row.refresh_token_sealed != credentials.stored_as
+            ):
+                return False
+            if replacement is None:
+                row.state = "needs_reauthorization"
+            else:
+                row.refresh_token_sealed = token_vault.seal(
+                    replacement, purpose=REFRESH_TOKEN_PURPOSE, settings=settings
+                )
+                row.key_version = KEY_VERSION
             row.updated_at = datetime.now(UTC)
-    except SQLAlchemyError:
-        # The sync stops with a fixed reason instead of going on with a token that the
-        # stored connection may no longer be able to renew.
+            return True
+    except (SQLAlchemyError, token_vault.VaultError):
         raise SourceError("connection_not_updated", NOT_UPDATED) from None
+
+
+def keep_new_refresh_token(
+    session: Session, settings: Settings, credentials: Credentials, payload: dict
+) -> None:
+    issued = payload.get("refresh_token")
+    if isinstance(issued, str) and issued != credentials.refresh_token and TOKEN.fullmatch(issued):
+        _update_current_grant(session, settings, credentials, replacement=issued)
+
+
+def refresh_refusal(
+    session: Session, settings: Settings, credentials: Credentials, error: SourceError
+) -> SourceError:
+    if error.code != "invalid_grant":
+        return error
+    if credentials.stored_as is None or _update_current_grant(
+        session, settings, credentials, replacement=None
+    ):
+        return SourceError("needs_reauthorization", NEEDS_REAUTHORIZATION)
+    return SourceError("provider_rejected", "Google rejected an earlier refresh grant.")
 
 
 def access_token(
@@ -144,12 +182,15 @@ def access_token(
     capability: str,
 ) -> str:
     """An access token for one capability. One request; a refusal is not retried."""
-    payload = gmail.request_access_token(
-        client,
-        settings,
-        client_id=credentials.client_id,
-        client_secret=credentials.client_secret,
-        refresh_token=credentials.refresh_token,
-    )
-    _keep_new_refresh_token(session, settings, credentials, payload)
+    try:
+        payload = gmail.request_access_token(
+            client,
+            settings,
+            client_id=credentials.client_id,
+            client_secret=credentials.client_secret,
+            refresh_token=credentials.refresh_token,
+        )
+    except SourceError as error:
+        raise refresh_refusal(session, settings, credentials, error) from None
+    keep_new_refresh_token(session, settings, credentials, payload)
     return CHECKED[capability](payload)

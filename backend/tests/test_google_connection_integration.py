@@ -166,6 +166,17 @@ def test_saving_a_client_stores_the_secret_sealed_and_reports_no_secret(
         "enabled_capabilities": ["calendar"],
         "granted_capabilities": [],
         "account_address": None,
+        "credential_source": "none",
+        "sync": {
+            name: {
+                "active": False,
+                "freshness": "inactive",
+                "last_success_at": None,
+                "last_attempt_at": None,
+                "last_status": "not_run",
+            }
+            for name in ("gmail", "calendar")
+        },
     }
     row = row_of(engine)
     assert (row.client_id, row.state, row.key_version) == (CLIENT_ID, "not_connected", 1)
@@ -346,6 +357,17 @@ def test_the_consent_flow_stores_a_sealed_grant(consent, profile_database):
         "enabled_capabilities": ["gmail", "calendar"],
         "granted_capabilities": ["gmail", "calendar"],
         "account_address": FIRST_ADDRESS,
+        "credential_source": "stored",
+        "sync": {
+            name: {
+                "active": False,
+                "freshness": "inactive",
+                "last_success_at": None,
+                "last_attempt_at": None,
+                "last_status": "not_run",
+            }
+            for name in ("gmail", "calendar")
+        },
     }
     with Session(engine) as session:
         assert len(session.scalars(select(GoogleConnection)).all()) == 1

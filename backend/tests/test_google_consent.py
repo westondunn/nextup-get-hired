@@ -1,11 +1,14 @@
 """The Google consent flow: start route, callback and access log. No database, no network."""
 
+import asyncio
 import json
 import logging
 import threading
 import time
+from contextlib import nullcontext
 from unittest.mock import MagicMock
 from urllib.parse import parse_qs, urlsplit
+from uuid import uuid4
 
 import httpx
 import pytest
@@ -15,7 +18,7 @@ from pydantic import SecretStr
 from redis.exceptions import ConnectionError as RedisConnectionError
 from test_local_session import FakeRedis
 
-from app import google_consent, token_vault
+from app import google_consent, google_lifecycle, token_vault
 from app.config import Settings
 from app.db import get_session
 from app.google_connection import (
@@ -44,7 +47,7 @@ from app.google_consent import (
 )
 from app.local_session import STORE_UNAVAILABLE, SessionStore, get_store, require_session
 from app.main import app
-from app.models import GoogleConnection
+from app.models import GoogleConnection, GoogleLifecycle
 from app.sources import gmail, google_calendar, google_oauth
 
 pytestmark = pytest.mark.usefixtures("local_session")
@@ -178,11 +181,14 @@ def flow(monkeypatch):
     redis = Redis()
     google = Google(events)
     current = {"settings": ENABLED}
+    lifecycle = GoogleLifecycle(id=1, epoch=uuid4(), sync_paused=False)
+    monkeypatch.setattr(google_lifecycle, "lifecycle_row", lambda *args, **kwargs: lifecycle)
+    monkeypatch.setattr(google_lifecycle, "action", lambda session: nullcontext())
     monkeypatch.setattr(google_consent, "get_settings", lambda: current["settings"])
     monkeypatch.setattr(
         google_consent,
-        "_http_client",
-        lambda: httpx.Client(transport=httpx.MockTransport(google.handler)),
+        "_async_http_client",
+        lambda: httpx.AsyncClient(transport=httpx.MockTransport(google.handler)),
     )
     app.dependency_overrides[get_session] = lambda: database
     app.dependency_overrides[get_flow_store] = lambda: FlowStore(redis)
@@ -280,6 +286,7 @@ def test_the_store_holds_hashes_of_state_and_binding_for_ten_minutes(flow):
         "capabilities": ["calendar"],
         "binding": google_consent._digest(binding),
         "client_id": CLIENT_ID,
+        "epoch": str(google_lifecycle.lifecycle_row(flow.database).epoch),
     }
 
 
@@ -656,6 +663,67 @@ def test_an_unreachable_google_stores_nothing(flow, monkeypatch):
     assert nothing_stored(flow)
 
 
+def test_consent_shares_one_deadline_across_requests_and_closes_a_slow_stream(flow, monkeypatch):
+    state = flow.started()
+    clock = {"now": 100.0}
+    closed = []
+
+    class SlowProfile(httpx.AsyncByteStream):
+        async def __aiter__(self):
+            yield b'{"emailAddress":'
+            await asyncio.sleep(1)
+            yield b'"synthetic@example.invalid"}'
+
+        async def aclose(self):
+            closed.append("profile")
+
+    def handler(request):
+        if str(request.url) == google_oauth.TOKEN_URL:
+            clock["now"] += 0.03
+            return flow.google.handler(request)
+        assert str(request.url) == f"{gmail.API_BASE}/profile"
+        assert request.headers["accept-encoding"] == "identity"
+        flow.events.append("profile")
+        return httpx.Response(200, stream=SlowProfile())
+
+    monkeypatch.setattr(google_consent, "monotonic", lambda: clock["now"])
+    monkeypatch.setattr(google_consent, "CONSENT_PROVIDER_SECONDS", 0.05)
+    monkeypatch.setattr(
+        google_consent,
+        "_async_http_client",
+        lambda: httpx.AsyncClient(transport=httpx.MockTransport(handler)),
+    )
+
+    response = flow.callback(state)
+    assert result_word(response) == "failed"
+    assert flow.events == ["exchange", "profile"] and closed == ["profile"]
+    assert nothing_stored(flow)
+
+
+def test_consent_rejects_an_over_limit_stream_without_buffering_it_all(flow, monkeypatch):
+    state = flow.started()
+    chunks = []
+
+    class EndlessToken(httpx.AsyncByteStream):
+        async def __aiter__(self):
+            for _ in range(100):
+                chunks.append(8192)
+                yield b"x" * chunks[-1]
+
+    monkeypatch.setattr(
+        google_consent,
+        "_async_http_client",
+        lambda: httpx.AsyncClient(
+            transport=httpx.MockTransport(
+                lambda _request: httpx.Response(200, stream=EndlessToken())
+            )
+        ),
+    )
+    assert result_word(flow.callback(state)) == "failed"
+    assert sum(chunks) == google_oauth.MAX_RESPONSE_BYTES + 8192
+    assert nothing_stored(flow)
+
+
 def test_an_exchange_without_a_refresh_token_stores_nothing(flow):
     flow.google.token = httpx.Response(200, json={"access_token": ACCESS, "scope": BOTH})
     state = flow.started()
@@ -883,8 +951,46 @@ def test_a_client_replaced_while_google_was_contacted_stores_nothing(flow):
     assert result_word(flow.callback(state)) == "failed"
     assert flow.events == ["exchange", "profile", "calendar"]
     assert other.refresh_token_sealed is None and first.refresh_token_sealed is None
-    # Once before Google is contacted, and once to give up the row lock.
-    assert flow.database.rollback.call_count == 2
+    # Once after capturing the epoch, once before Google, and once to release the write lock.
+    assert flow.database.rollback.call_count == 3
+
+
+def test_disconnect_epoch_refuses_an_old_callback_even_with_the_same_client(flow):
+    state = flow.started()
+    lifecycle = google_lifecycle.lifecycle_row(flow.database)
+    google_lifecycle.invalidate(lifecycle)
+    assert result_word(flow.callback(state)) == "failed"
+    assert flow.google.requests == []
+    assert nothing_stored(flow)
+
+
+def test_successful_consent_rotates_the_grant_generation_without_resuming_sync(flow):
+    lifecycle = google_lifecycle.lifecycle_row(flow.database)
+    google_lifecycle.invalidate(lifecycle)
+    epoch = lifecycle.epoch
+    first = flow.started()
+    second = flow.started()
+    assert result_word(flow.callback(first)) == "connected"
+    generation = lifecycle.generation
+    assert generation is not None and lifecycle.sync_paused
+    assert result_word(flow.callback(second)) == "connected"
+    assert lifecycle.generation != generation and lifecycle.epoch == epoch
+    assert lifecycle.sync_paused
+
+
+def test_busy_callback_leaves_state_for_a_retry(flow, monkeypatch):
+    state = flow.started()
+
+    def busy(_session):
+        raise google_lifecycle.LifecycleBusy
+
+    monkeypatch.setattr(google_lifecycle, "action", busy)
+    response = flow.callback(state)
+    assert response.status_code == 409
+    assert response.json() == {"detail": google_lifecycle.BUSY_MESSAGE}
+    assert flow.google.requests == []
+    monkeypatch.setattr(google_lifecycle, "action", lambda session: nullcontext())
+    assert result_word(flow.callback(state)) == "connected"
 
 
 def test_a_client_secret_that_cannot_be_opened_stores_nothing(flow):
@@ -899,6 +1005,7 @@ def test_a_client_secret_that_cannot_be_opened_stores_nothing(flow):
 
 def test_an_unexpected_failure_is_logged_by_type_only(flow, caplog):
     state = flow.started()
+    flow.database.rollback.reset_mock()
     flow.database.commit.side_effect = RuntimeError("detail naming " + REFRESH)
     caplog.set_level(logging.DEBUG)
     response = flow.callback(state)

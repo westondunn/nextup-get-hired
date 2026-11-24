@@ -8,20 +8,28 @@ mail and never changes labels.
 """
 
 import re
-from dataclasses import replace
+from contextlib import nullcontext
+from dataclasses import dataclass, replace
 from datetime import UTC, datetime, timedelta
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import httpx
 from sqlalchemy import Integer, func, or_, select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
-from app import application_detect, email_classifications, google_credentials
+from app import application_detect, email_classifications, google_credentials, google_lifecycle
 from app.celery_app import celery_app
 from app.config import Settings, get_settings
 from app.db import get_engine
-from app.models import Communication, Contact, CorrespondenceSyncSettings, Pursuit
+from app.models import (
+    Communication,
+    Contact,
+    CorrespondenceSyncSettings,
+    GoogleConnection,
+    GoogleLifecycle,
+    Pursuit,
+)
 from app.sources import gmail, google_calendar
 from app.sources.common import SourceError
 
@@ -153,15 +161,62 @@ def suggest_pursuit(message: gmail.ParsedMessage, pursuits: list[Pursuit]) -> Pu
     return candidates[0]
 
 
-def _record_result(config: CorrespondenceSyncSettings, status: str, error: str, imported: int):
-    config.last_run_at = datetime.now(UTC)
-    config.last_status = status
-    config.last_error = error[:1000]
-    config.last_imported = imported
-    config.updated_at = datetime.now(UTC)
+class _ObsoleteSync(Exception):
+    """The connection changed or sync was paused after this run began."""
 
 
-def _classify_stored(session: Session, client: httpx.Client, token: str) -> int:
+@dataclass(frozen=True)
+class _Attempt:
+    session: Session
+    config: CorrespondenceSyncSettings
+    capability: str
+    epoch: UUID
+    generation: UUID | None
+    mutable_since: datetime | None
+    cursor: int | None
+
+    def current(self, *, lock: bool = False, check_grant: bool = True) -> GoogleLifecycle:
+        row = google_lifecycle.lifecycle_row(self.session, lock=lock)
+        if row.sync_paused or (row.epoch, row.generation) != (self.epoch, self.generation):
+            raise _ObsoleteSync
+        if check_grant and self.generation is not None:
+            connection = self.session.get(GoogleConnection, 1, populate_existing=True)
+            if connection is None or connection.state != "connected":
+                raise _ObsoleteSync
+        return row
+
+    def record(self, status: str, error: str, imported: int, *, complete: bool = False):
+        # This lock stays held through commit, including all imports and any intake.
+        row = self.current(
+            lock=True, check_grant=status not in {"needs_reauthorization", "not_configured"}
+        )
+        now = datetime.now(UTC)
+        prefix = "calendar_" if self.capability == "calendar" else ""
+        setattr(self.config, prefix + "last_run_at", now)
+        setattr(self.config, prefix + "last_status", status)
+        setattr(self.config, prefix + "last_error", error[:1000])
+        setattr(self.config, prefix + "last_imported", imported)
+        self.config.updated_at = now
+        setattr(row, self.capability + "_attempt_generation", self.generation)
+        if complete and self.generation is not None:
+            setattr(row, self.capability + "_last_success_at", now)
+
+
+def _classification_query(attempt: _Attempt):
+    query = select(Communication).where(
+        Communication.source == SOURCE,
+        or_(
+            Communication.detection.is_(None),
+            func.coalesce(Communication.detection["v"].astext.cast(Integer), 1)
+            < application_detect.VERSION,
+        ),
+    )
+    if attempt.mutable_since is not None:
+        query = query.where(Communication.created_at >= attempt.mutable_since)
+    return query
+
+
+def _classify_stored(stored: list[Communication], own: str) -> None:
     """Classify stored mail the current rules have not seen; once per message and version.
 
     Covers mail imported before detection existed and, after a rules change, mail the
@@ -169,20 +224,7 @@ def _classify_stored(session: Session, client: httpx.Client, token: str) -> int:
     Earlier versions also stored the user's own sent messages as inbound; those are
     recognized by the mailbox address and corrected to sent outbound mail.
     """
-    stored = session.scalars(
-        select(Communication).where(
-            Communication.source == SOURCE,
-            or_(
-                Communication.detection.is_(None),
-                func.coalesce(Communication.detection["v"].astext.cast(Integer), 1)
-                < application_detect.VERSION,
-            ),
-        )
-    ).all()
-    if not stored:
-        return 0
     nothing = application_detect.Detection().as_dict()
-    own = gmail.profile_email(client, token) if any(r.detection is None for r in stored) else ""
     for row in stored:
         name, address = application_detect.split_sender(row.sender or "")
         previous = row.detection
@@ -194,7 +236,7 @@ def _classify_stored(session: Session, client: httpx.Client, token: str) -> int:
             row.detection = {**previous, "v": application_detect.VERSION}
         elif row.direction != "inbound":
             row.detection = nothing
-        elif previous is None and own and address == own:
+        elif previous is None and row.status == "received" and own and address == own:
             row.direction, row.status = "outbound", "sent"
             row.sent_at = row.sent_at or row.received_at
             row.detection = nothing
@@ -208,7 +250,6 @@ def _classify_stored(session: Session, client: httpx.Client, token: str) -> int:
             kind = row.detection.get("kind")
             hint = {**hint, "agrees": email_classifications.agrees(kind, hint["classification"])}
             row.detection = {**row.detection, email_classifications.HINT_KEY: hint}
-    return len(stored)
 
 
 def _interview_event(subject: str, description: str) -> dict:
@@ -219,151 +260,251 @@ def _interview_event(subject: str, description: str) -> dict:
     return found.as_dict()
 
 
+def _sync(
+    session: Session,
+    settings: Settings,
+    client: httpx.Client | None,
+    now: datetime | None,
+    capability: str,
+    *,
+    intake: bool = False,
+) -> dict:
+    # Syncs and Settings always take this lock first. Lifecycle actions never need it.
+    config = session.get(CorrespondenceSyncSettings, 1, with_for_update=True)
+    switch = "calendar_enabled" if capability == "calendar" else "enabled"
+    if config is None or not getattr(config, switch):
+        return {"status": "disabled", "imported": 0}
+    lifecycle = google_lifecycle.lifecycle_row(session)
+    if lifecycle.sync_paused:
+        return {"status": "disabled", "imported": 0}
+    admitted_at = datetime.now(UTC)
+    now = now or admitted_at
+    mutable_since = lifecycle.imports_since
+    if mutable_since is not None and lifecycle.generation is None:
+        # After disconnect we cannot identify the mailbox of an external credential.
+        # Only this run's own newly inserted rows can be used for automatic maintenance.
+        mutable_since = admitted_at
+    existing_cursor = (lifecycle.generation is None and lifecycle.imports_since is None) or (
+        lifecycle.generation is not None and lifecycle.gmail_last_success_at is not None
+    )
+    attempt = _Attempt(
+        session,
+        config,
+        capability,
+        lifecycle.epoch,
+        lifecycle.generation,
+        mutable_since,
+        config.cursor_epoch if existing_cursor else None,
+    )
+    try:
+        try:
+            if not getattr(settings, capability + "_sync_enabled"):
+                message = (
+                    "Gmail credentials are not configured."
+                    if capability == "gmail"
+                    else "Google credentials are not configured."
+                )
+                attempt.record("not_configured", message, 0)
+                return {"status": "not_configured", "imported": 0}
+            credentials = google_credentials.resolve(
+                session, settings, capability, lifecycle=lifecycle
+            )
+            if (credentials.epoch, credentials.generation) != (attempt.epoch, attempt.generation):
+                raise _ObsoleteSync
+            attempt.current()
+            with (
+                nullcontext(client)
+                if client is not None
+                else httpx.Client(timeout=10, follow_redirects=False, trust_env=False)
+            ) as http:
+                token = google_credentials.access_token(
+                    http, session, settings, credentials, capability
+                )
+                if capability == "gmail":
+                    result = _import_gmail(attempt, http, token, now)
+                else:
+                    result = _import_calendar(attempt, http, token, now)
+        except SourceError as exc:
+            attempt.record(exc.code, exc.message, 0)
+            return {"status": exc.code, "imported": 0, "error": exc.message}
+        if intake and result["status"] == "ok":
+            from app import application_intake
+
+            session.flush()
+            result["applications"] = application_intake.run(session, since=attempt.mutable_since)
+        return result
+    except _ObsoleteSync:
+        # All database mutations are downstream of the final lifecycle lock.
+        return {"status": "disabled", "imported": 0}
+
+
 def sync_gmail(
     session: Session,
     settings: Settings | None = None,
     client: httpx.Client | None = None,
     now: datetime | None = None,
+    *,
+    intake: bool = False,
 ) -> dict:
-    settings = settings or get_settings()
-    now = now or datetime.now(UTC)
-    config = session.get(CorrespondenceSyncSettings, 1, with_for_update=True)
-    if config is None or not config.enabled:
-        return {"status": "disabled", "imported": 0}
-    if not settings.gmail_sync_enabled:
-        _record_result(config, "not_configured", "Gmail credentials are not configured.", 0)
-        return {"status": "not_configured", "imported": 0}
-    try:
-        # The stored connection, or the fallback in configuration. Contacts nothing.
-        credentials = google_credentials.resolve(session, settings, "gmail")
-    except SourceError as exc:
-        _record_result(config, exc.code, exc.message, 0)
-        return {"status": exc.code, "imported": 0, "error": exc.message}
-    if client is None:
-        with httpx.Client(timeout=10, follow_redirects=False, trust_env=False) as owned:
-            return sync_gmail(session, settings, client=owned, now=now)
+    return _sync(session, settings or get_settings(), client, now, "gmail", intake=intake)
 
-    imported = 0
-    try:
-        token = google_credentials.access_token(client, session, settings, credentials, "gmail")
-        lookback = now - timedelta(days=INITIAL_LOOKBACK_DAYS)
-        after = config.cursor_epoch or int(lookback.timestamp())
-        query = f"{config.query.strip()} after:{after}".strip()
-        refs = gmail.list_message_refs(client, token, query, MAX_LISTED_IDS)
-        ids = [message_id for message_id, _ in refs]
-        known = set(
-            session.scalars(
-                select(Communication.source_id).where(
-                    Communication.source == SOURCE, Communication.source_id.in_(ids or [""])
-                )
-            ).all()
+
+def _import_gmail(attempt: _Attempt, client: httpx.Client, token: str, now: datetime) -> dict:
+    session, config = attempt.session, attempt.config
+    lookback = now - timedelta(days=INITIAL_LOOKBACK_DAYS)
+    after = attempt.cursor or int(lookback.timestamp())
+    query = f"{config.query.strip()} after:{after}".strip()
+    refs, complete = gmail.message_listing(
+        client, token, query, MAX_LISTED_IDS, admit=attempt.current
+    )
+    ids = list(dict.fromkeys(message_id for message_id, _ in refs))
+    known = set(
+        session.scalars(
+            select(Communication.source_id).where(
+                Communication.source == SOURCE, Communication.source_id.in_(ids or [""])
+            )
+        ).all()
+    )
+    if known and attempt.mutable_since is not None:
+        protected = session.scalar(
+            select(Communication.id)
+            .where(
+                Communication.source == SOURCE,
+                Communication.source_id.in_(known),
+                Communication.created_at < attempt.mutable_since,
+            )
+            .limit(1)
         )
-        pending = [message_id for message_id in ids if message_id not in known]
-        batch = pending[: config.max_messages_per_run]
-        contacts = {
-            c.email.strip().lower(): c
-            for c in session.scalars(select(Contact).where(Contact.email.is_not(None))).all()
-            if c.email and c.email.strip()
-        }
-        pursuits = session.scalars(select(Pursuit).where(Pursuit.stage.in_(OPEN_STAGES))).all()
-        newest = config.cursor_epoch or 0
+        if protected is not None:
+            complete = False
+    pending = [message_id for message_id in ids if message_id not in known]
+    batch = pending[: config.max_messages_per_run]
+    classification_query = _classification_query(attempt)
+    needs_owner = (
+        session.scalar(
+            classification_query.with_only_columns(Communication.id)
+            .where(Communication.detection.is_(None))
+            .limit(1)
+        )
+        is not None
+    )
+    own_address = ""
+    if needs_owner:
+        attempt.current()
         try:
-            _classify_stored(session, client, token)
+            own_address = gmail.profile_email(client, token)
         except SourceError:
-            pass  # Unclassified rows stay NULL and are retried on the next run.
-        for message_id in batch:
+            pass
+        if not own_address:
+            # Keep legacy rows with no detection unchanged until the profile can be read.
+            complete = False
+    if not own_address:
+        classification_query = classification_query.where(Communication.detection.is_not(None))
+    messages = []
+    failure = None
+    for message_id in batch:
+        attempt.current()
+        try:
             message = gmail.parse_message(gmail.fetch_message(client, token, message_id))
-            # Mail the user sent is logged as sent, so it is never treated as awaiting a reply.
-            own = message.is_sent
-            contact = contacts.get(message.recipient_email if own else message.sender_email)
-            # For your own mail the employer is on the receiving end.
-            suggestion = suggest_pursuit(
-                replace(message, sender_email=message.recipient_email, sender_name="")
-                if own
-                else message,
-                pursuits,
+            if message.source_id != message_id:
+                raise SourceError("invalid_response", "Gmail returned an unexpected message.")
+            messages.append(message)
+        except SourceError as exc:
+            failure = exc
+            break
+    # Buffer only the bounded batch. No provider request is made with this lock held.
+    attempt.current(lock=True)
+    stored = session.scalars(
+        classification_query.with_for_update().execution_options(populate_existing=True)
+    ).all()
+    _classify_stored(stored, own_address)
+    contacts = {
+        c.email.strip().lower(): c
+        for c in session.scalars(select(Contact).where(Contact.email.is_not(None))).all()
+        if c.email and c.email.strip()
+    }
+    pursuits = session.scalars(select(Pursuit).where(Pursuit.stage.in_(OPEN_STAGES))).all()
+    newest = attempt.cursor
+    imported = 0
+    for message in messages:
+        # Mail the user sent is logged as sent, so it is never treated as awaiting a reply.
+        own = message.is_sent
+        contact = contacts.get(message.recipient_email if own else message.sender_email)
+        # For your own mail the employer is on the receiving end.
+        suggestion = suggest_pursuit(
+            replace(message, sender_email=message.recipient_email, sender_name="")
+            if own
+            else message,
+            pursuits,
+        )
+        detection = (
+            application_detect.Detection()
+            if own
+            else application_detect.classify(
+                message.subject,
+                message.body,
+                message.sender_name,
+                message.sender_email,
+                message.auto_reply,
             )
-            detection = (
-                application_detect.Detection()
-                if own
-                else application_detect.classify(
-                    message.subject,
-                    message.body,
-                    message.sender_name,
-                    message.sender_email,
-                    message.auto_reply,
-                )
+        )
+        session.add(
+            Communication(
+                id=uuid4(),
+                contact_id=contact.id if contact else None,
+                pursuit_id=None,
+                campaign_task_id=None,
+                channel="email",
+                direction="outbound" if own else "inbound",
+                subject=message.subject,
+                body=message.body,
+                status="sent" if own else "received",
+                sent_at=message.received_at if own else None,
+                received_at=message.received_at,
+                notes="",
+                source=SOURCE,
+                source_id=message.source_id,
+                thread_id=message.thread_id or None,
+                sender=(
+                    f"{message.sender_name} <{message.sender_email}>"
+                    if message.sender_name
+                    else message.sender_email
+                )[:320]
+                or None,
+                suggested_pursuit_id=suggestion.id if suggestion else None,
+                detection=detection.as_dict(),
+                created_at=datetime.now(UTC),
+                updated_at=now,
             )
-            session.add(
-                Communication(
-                    id=uuid4(),
-                    contact_id=contact.id if contact else None,
-                    pursuit_id=None,
-                    campaign_task_id=None,
-                    channel="email",
-                    direction="outbound" if own else "inbound",
-                    subject=message.subject,
-                    body=message.body,
-                    status="sent" if own else "received",
-                    sent_at=message.received_at if own else None,
-                    received_at=message.received_at,
-                    notes="",
-                    source=SOURCE,
-                    source_id=message.source_id,
-                    thread_id=message.thread_id or None,
-                    sender=(
-                        f"{message.sender_name} <{message.sender_email}>"
-                        if message.sender_name
-                        else message.sender_email
-                    )[:320]
-                    or None,
-                    suggested_pursuit_id=suggestion.id if suggestion else None,
-                    detection=detection.as_dict(),
-                    created_at=now,
-                    updated_at=now,
-                )
-            )
-            imported += 1
-            newest = max(newest, int(message.received_at.timestamp()))
-        if len(pending) <= len(batch) and newest:
-            # Every listed message is stored; later runs only need newer mail.
-            config.cursor_epoch = newest
-        # The external classifier's verdicts, whether written before these imports or since.
-        session.flush()
-        classified = email_classifications.reconcile(session, now)
-        _record_result(config, "ok", "", imported)
-        return {
-            "status": "ok",
-            "imported": imported,
-            "remaining": len(pending) - len(batch),
-            "classifications": classified,
-        }
-    except SourceError as exc:
-        _record_result(config, exc.code, exc.message, imported)
-        return {"status": exc.code, "imported": imported, "error": exc.message}
+        )
+        imported += 1
+        newest = max(newest or 0, int(message.received_at.timestamp()))
+    if failure is not None:
+        attempt.record(failure.code, failure.message, imported)
+        return {"status": failure.code, "imported": imported, "error": failure.message}
+    complete = complete and len(pending) <= len(batch)
+    if complete:
+        config.cursor_epoch = newest
+    session.flush()
+    classified = email_classifications.reconcile(session, now, since=attempt.mutable_since)
+    attempt.record("ok", "", imported, complete=complete)
+    return {
+        "status": "ok",
+        "imported": imported,
+        "remaining": len(pending) - len(batch),
+        "classifications": classified,
+    }
 
 
 @celery_app.task(bind=True, name="app.correspondence_tasks.sync_gmail")
 def sync_gmail_task(self):
     try:
-        from app import application_intake
-
         with Session(get_engine()) as session, session.begin():
-            result = sync_gmail(session)
-            session.flush()
-            return {**result, "applications": application_intake.run(session)}
+            return sync_gmail(session, intake=True)
     except SQLAlchemyError:
         raise self.retry(
             exc=RuntimeError("Correspondence sync unavailable"), countdown=30, max_retries=2
         ) from None
-
-
-def _calendar_result(config: CorrespondenceSyncSettings, status: str, error: str, imported: int):
-    config.calendar_last_run_at = datetime.now(UTC)
-    config.calendar_last_status = status
-    config.calendar_last_error = error[:1000]
-    config.calendar_last_imported = imported
-    config.updated_at = datetime.now(UTC)
 
 
 def _event_body(event: google_calendar.ParsedEvent) -> str:
@@ -394,120 +535,111 @@ def sync_calendar(
     now: datetime | None = None,
 ) -> dict:
     """Log upcoming and just-finished events as review-queue notes. Read-only."""
-    settings = settings or get_settings()
-    now = now or datetime.now(UTC)
-    config = session.get(CorrespondenceSyncSettings, 1, with_for_update=True)
-    if config is None or not config.calendar_enabled:
-        return {"status": "disabled", "imported": 0}
-    if not settings.calendar_sync_enabled:
-        _calendar_result(config, "not_configured", "Google credentials are not configured.", 0)
-        return {"status": "not_configured", "imported": 0}
-    try:
-        # The stored connection, or the fallback in configuration. Contacts nothing.
-        credentials = google_credentials.resolve(session, settings, "calendar")
-    except SourceError as exc:
-        _calendar_result(config, exc.code, exc.message, 0)
-        return {"status": exc.code, "imported": 0, "error": exc.message}
-    if client is None:
-        with httpx.Client(timeout=10, follow_redirects=False, trust_env=False) as owned:
-            return sync_calendar(session, settings, client=owned, now=now)
+    return _sync(session, settings or get_settings(), client, now, "calendar")
 
+
+def _import_calendar(attempt: _Attempt, client: httpx.Client, token: str, now: datetime) -> dict:
+    session, config = attempt.session, attempt.config
+    start, end = google_calendar.window(now, config.calendar_lookahead_days)
+    attempt.current()
+    items, complete = google_calendar.event_listing(client, token, start, end)
+    events = {}
+    for item in items:
+        event = google_calendar.parse_event(item)
+        if event is not None:
+            if event.source_id in events:
+                complete = False
+            events[event.source_id] = event
+        elif item.get("status") != "cancelled":
+            complete = False
+    attempt.current(lock=True)
     imported = updated = 0
-    try:
-        token = google_credentials.access_token(client, session, settings, credentials, "calendar")
-        start, end = google_calendar.window(now, config.calendar_lookahead_days)
-        events = [
-            parsed
-            for parsed in map(
-                google_calendar.parse_event, google_calendar.list_events(client, token, start, end)
+    ids = list(events)
+    existing = {
+        row.source_id: row
+        for row in session.scalars(
+            select(Communication).where(
+                Communication.source == CALENDAR_SOURCE,
+                Communication.source_id.in_(ids or [""]),
             )
-            if parsed is not None
-        ]
-        ids = [event.source_id for event in events]
-        existing = {
-            row.source_id: row
-            for row in session.scalars(
-                select(Communication).where(
-                    Communication.source == CALENDAR_SOURCE,
-                    Communication.source_id.in_(ids or [""]),
-                )
-            ).all()
-        }
-        contacts = {
-            c.email.strip().lower(): c
-            for c in session.scalars(select(Contact).where(Contact.email.is_not(None))).all()
-            if c.email and c.email.strip()
-        }
-        pursuits = session.scalars(select(Pursuit).where(Pursuit.stage.in_(OPEN_STAGES))).all()
-        for event in events:
-            subject = event.summary or "(untitled event)"
-            body = _event_body(event)
-            row = existing.get(event.source_id)
-            if row is not None:
-                if row.detection is None:
-                    row.detection = _interview_event(subject, event.description)
-                if (
-                    row.subject != subject
-                    or row.body != body
-                    or row.received_at != event.starts_at
-                    or bool(row.all_day) != event.all_day
-                ):
-                    row.subject, row.body, row.received_at = subject, body, event.starts_at
-                    row.all_day = event.all_day
-                    row.updated_at = now
-                    updated += 1
+        ).all()
+    }
+    contacts = {
+        c.email.strip().lower(): c
+        for c in session.scalars(select(Contact).where(Contact.email.is_not(None))).all()
+        if c.email and c.email.strip()
+    }
+    pursuits = session.scalars(select(Pursuit).where(Pursuit.stage.in_(OPEN_STAGES))).all()
+    for event in events.values():
+        subject = event.summary or "(untitled event)"
+        body = _event_body(event)
+        row = existing.get(event.source_id)
+        if row is not None:
+            if attempt.mutable_since is not None and row.created_at < attempt.mutable_since:
+                # The global provider ID may be shared by two mailboxes.
+                complete = False
                 continue
-            people = list(event.attendee_emails)
-            if event.organizer_email:
-                people.append(event.organizer_email)
-            contact = next((contacts[email] for email in people if email in contacts), None)
-            counterpart = next((email for email in people if email not in contacts), "")
-            message = gmail.ParsedMessage(
-                source_id=event.source_id,
-                thread_id="",
-                sender_name=event.organizer_name,
-                sender_email=counterpart or event.organizer_email,
-                subject=f"{subject} {event.description[:500]}",
-                body="",
+            if row.detection is None:
+                row.detection = _interview_event(subject, event.description)
+            if (
+                row.subject != subject
+                or row.body != body
+                or row.received_at != event.starts_at
+                or bool(row.all_day) != event.all_day
+            ):
+                row.subject, row.body, row.received_at = subject, body, event.starts_at
+                row.all_day = event.all_day
+                row.updated_at = now
+                updated += 1
+            continue
+        people = list(event.attendee_emails)
+        if event.organizer_email:
+            people.append(event.organizer_email)
+        contact = next((contacts[email] for email in people if email in contacts), None)
+        counterpart = next((email for email in people if email not in contacts), "")
+        message = gmail.ParsedMessage(
+            source_id=event.source_id,
+            thread_id="",
+            sender_name=event.organizer_name,
+            sender_email=counterpart or event.organizer_email,
+            subject=f"{subject} {event.description[:500]}",
+            body="",
+            received_at=event.starts_at,
+        )
+        suggestion = suggest_pursuit(message, pursuits)
+        virtual = bool(event.link) or not event.location or "://" in event.location
+        session.add(
+            Communication(
+                id=uuid4(),
+                contact_id=contact.id if contact else None,
+                pursuit_id=None,
+                campaign_task_id=None,
+                channel="other" if virtual else "in_person",
+                direction="note",
+                subject=subject,
+                body=body,
+                status="private_note",
                 received_at=event.starts_at,
+                all_day=event.all_day,
+                notes=INTERVIEW_HINT,
+                source=CALENDAR_SOURCE,
+                source_id=event.source_id,
+                thread_id=None,
+                detection=_interview_event(subject, event.description),
+                sender=(
+                    f"{event.organizer_name} <{event.organizer_email}>"
+                    if event.organizer_name
+                    else event.organizer_email
+                )[:320]
+                or None,
+                suggested_pursuit_id=suggestion.id if suggestion else None,
+                created_at=datetime.now(UTC),
+                updated_at=now,
             )
-            suggestion = suggest_pursuit(message, pursuits)
-            virtual = bool(event.link) or not event.location or "://" in event.location
-            session.add(
-                Communication(
-                    id=uuid4(),
-                    contact_id=contact.id if contact else None,
-                    pursuit_id=None,
-                    campaign_task_id=None,
-                    channel="other" if virtual else "in_person",
-                    direction="note",
-                    subject=subject,
-                    body=body,
-                    status="private_note",
-                    received_at=event.starts_at,
-                    all_day=event.all_day,
-                    notes=INTERVIEW_HINT,
-                    source=CALENDAR_SOURCE,
-                    source_id=event.source_id,
-                    thread_id=None,
-                    detection=_interview_event(subject, event.description),
-                    sender=(
-                        f"{event.organizer_name} <{event.organizer_email}>"
-                        if event.organizer_name
-                        else event.organizer_email
-                    )[:320]
-                    or None,
-                    suggested_pursuit_id=suggestion.id if suggestion else None,
-                    created_at=now,
-                    updated_at=now,
-                )
-            )
-            imported += 1
-        _calendar_result(config, "ok", "", imported)
-        return {"status": "ok", "imported": imported, "updated": updated}
-    except SourceError as exc:
-        _calendar_result(config, exc.code, exc.message, imported)
-        return {"status": exc.code, "imported": imported, "error": exc.message}
+        )
+        imported += 1
+    attempt.record("ok", "", imported, complete=complete)
+    return {"status": "ok", "imported": imported, "updated": updated}
 
 
 @celery_app.task(bind=True, name="app.correspondence_tasks.sync_calendar")

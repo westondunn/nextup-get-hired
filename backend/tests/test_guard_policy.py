@@ -141,7 +141,7 @@ class Lineage(unittest.TestCase):
         # The pinned revisions come first, unchanged; revisions added since follow them.
         self.assertEqual(LINEAGE.order[:29], tuple(f"{n:04d}" for n in range(1, 30)))
         # Stated in full on purpose: a new revision has to be added here by hand.
-        self.assertEqual(ADDED, ("oss_0030", "oss_0031"))
+        self.assertEqual(ADDED, ("oss_0030", "oss_0031", "oss_0032"))
         self.assertEqual(LINEAGE.head, ADDED[-1])
         self.assertTrue(LINEAGE.crosses(None, "0029", "0029"))
         self.assertTrue(LINEAGE.crosses("0028", "0029", "0029"))

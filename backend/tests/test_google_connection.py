@@ -1,11 +1,15 @@
 """Saving and reporting the user's Google OAuth client. No database and no network."""
 
 import json
+from contextlib import nullcontext
+from datetime import UTC, datetime, timedelta
 from unittest.mock import MagicMock
+from uuid import uuid4
 
 import pytest
 from fastapi.testclient import TestClient
 from pydantic import SecretStr
+from sqlalchemy.exc import OperationalError
 
 from app import google_connection, token_vault
 from app.config import Settings
@@ -22,7 +26,7 @@ from app.google_connection import (
     SWITCHED_OFF,
 )
 from app.main import app
-from app.models import GoogleConnection
+from app.models import CorrespondenceSyncSettings, GoogleConnection, GoogleLifecycle
 
 pytestmark = pytest.mark.usefixtures("local_session")
 
@@ -33,6 +37,18 @@ CLIENT_SECRET = "SYNTHETIC-client-secret-that-must-never-leak"
 REFRESH_TOKEN = "synthetic-refresh-token-that-must-never-leak"
 ENABLED = Settings(gmail_sync_enabled=True, token_key=SecretStr(KEY))
 BODY = {"client_id": CLIENT_ID, "client_secret": CLIENT_SECRET}
+
+
+EMPTY_SYNC = {
+    name: {
+        "active": False,
+        "last_attempt_at": None,
+        "last_status": "not_run",
+        "last_success_at": None,
+        "freshness": "inactive",
+    }
+    for name in ("gmail", "calendar")
+}
 
 
 def seal(value, purpose, settings=ENABLED):
@@ -64,7 +80,17 @@ def api(monkeypatch):
     """The real application, a database double, and settings that allow a connection."""
     database = MagicMock()
     database.get.return_value = None
-    current = {"settings": ENABLED}
+    lifecycle = GoogleLifecycle(id=1, epoch=uuid4(), sync_paused=False)
+    current = {"settings": ENABLED, "lifecycle": lifecycle, "config": None}
+    database.execute.return_value.one.side_effect = lambda: (
+        lifecycle,
+        database.get.return_value,
+        current["config"],
+    )
+    monkeypatch.setattr(google_connection.google_lifecycle, "action", lambda _: nullcontext())
+    monkeypatch.setattr(
+        google_connection.google_lifecycle, "lifecycle_row", lambda _, **kw: lifecycle
+    )
     monkeypatch.setattr(google_connection, "get_settings", lambda: current["settings"])
     app.dependency_overrides[get_session] = lambda: database
     try:
@@ -188,9 +214,11 @@ def test_the_secret_is_sealed_before_it_reaches_the_database(api):
         "enabled_capabilities": ["gmail"],
         "granted_capabilities": [],
         "account_address": None,
+        "credential_source": "none",
+        "sync": EMPTY_SYNC,
     }
     # The statement that creates the row carries the sealed value and never the plain one.
-    (statement,) = database.execute.call_args.args
+    (statement,) = database.execute.call_args_list[0].args
     parameters = statement.compile().params
     assert parameters["client_id"] == CLIENT_ID and parameters["key_version"] == 1
     assert CLIENT_SECRET not in json.dumps(parameters)
@@ -250,6 +278,8 @@ def test_nothing_stored_is_reported_as_not_configured(api):
         "enabled_capabilities": ["gmail"],
         "granted_capabilities": [],
         "account_address": None,
+        "credential_source": "none",
+        "sync": EMPTY_SYNC,
     }
     current["settings"] = Settings()
     assert client.get("/api/google/connection").json() == {
@@ -261,6 +291,8 @@ def test_nothing_stored_is_reported_as_not_configured(api):
         "enabled_capabilities": [],
         "granted_capabilities": [],
         "account_address": None,
+        "credential_source": "none",
+        "sync": EMPTY_SYNC,
     }
 
 
@@ -295,6 +327,8 @@ def test_the_report_carries_the_state_and_never_a_credential(api):
             "enabled_capabilities",
             "granted_capabilities",
             "account_address",
+            "credential_source",
+            "sync",
         }
         assert row.client_secret_sealed not in response.text and not leaks(response)
         assert row.refresh_token_sealed is None or row.refresh_token_sealed not in response.text
@@ -360,3 +394,75 @@ def test_a_record_the_key_cannot_open_is_reported_as_unreadable(api):
 def test_nothing_in_the_module_logs():
     source = open(google_connection.__file__).read()
     assert "logging" not in source and "print(" not in source
+
+
+@pytest.mark.parametrize(("age", "expected"), [(None, "unknown"), (300, "current"), (601, "stale")])
+def test_status_attributes_success_and_attempt_to_current_stored_grant(api, age, expected):
+    client, database, current = api
+    current["config"] = CorrespondenceSyncSettings(enabled=True, calendar_enabled=True)
+    life = current["lifecycle"]
+    life.generation = life.gmail_attempt_generation = uuid4()
+    database.get.return_value = connected(
+        granted_scopes=["https://www.googleapis.com/auth/gmail.readonly"]
+    )
+    now = datetime.now(UTC)
+    current["config"].last_run_at = now
+    current["config"].last_status = "provider_unavailable"
+    life.gmail_last_success_at = None if age is None else now - timedelta(seconds=age)
+    report = client.get("/api/google/connection").json()
+    assert report["credential_source"] == "stored"
+    mail = report["sync"]["gmail"]
+    assert mail["active"] and mail["freshness"] == expected
+    assert mail["last_status"] == "temporarily_unavailable" and mail["last_attempt_at"]
+    assert bool(mail["last_success_at"]) == (age is not None)
+    assert report["sync"]["calendar"] == EMPTY_SYNC["calendar"]
+
+    life.gmail_attempt_generation = uuid4()
+    life.sync_paused = True
+    mail = client.get("/api/google/connection").json()["sync"]["gmail"]
+    assert (mail["active"], mail["freshness"], mail["last_status"], mail["last_attempt_at"]) == (
+        False,
+        "inactive",
+        "not_run",
+        None,
+    )
+
+
+def test_configured_fallback_has_no_attributable_history_and_never_supersedes_a_grant(api):
+    client, database, current = api
+    current["settings"] = ENABLED.model_copy(
+        update={
+            "google_oauth_client_id": SecretStr("synthetic"),
+            "google_oauth_client_secret": SecretStr("synthetic"),
+            "gmail_refresh_token": SecretStr("synthetic"),
+        }
+    )
+    current["config"] = CorrespondenceSyncSettings(enabled=True)
+    life = current["lifecycle"]
+    life.generation = life.gmail_attempt_generation = uuid4()
+    life.gmail_last_success_at = current["config"].last_run_at = datetime.now(UTC)
+    current["config"].last_status = "ok"
+    database.get.return_value = stored()
+    report = client.get("/api/google/connection").json()
+    assert report["credential_source"] == "configured"
+    assert report["sync"]["gmail"] == {
+        **EMPTY_SYNC["gmail"],
+        "active": True,
+        "freshness": "unknown",
+    }
+    database.get.return_value = connected(refresh_token_sealed="unreadable")
+    report = client.get("/api/google/connection").json()
+    assert (report["credential_source"], report["state"], report["sync"]["gmail"]["active"]) == (
+        "stored",
+        "unreadable",
+        False,
+    )
+
+
+def test_failed_read_returns_a_fixed_reason(api):
+    client, database, _ = api
+    database.execute.side_effect = OperationalError(None, None, RuntimeError(REFRESH_TOKEN))
+    response = client.get("/api/google/connection")
+    assert response.status_code == 503
+    assert response.json()["detail"]["code"] == "connection_error"
+    assert not leaks(response)

@@ -8,6 +8,7 @@ mocked ``httpx.Client``.
 import base64
 import binascii
 import logging
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from email.utils import parseaddr
@@ -50,11 +51,44 @@ def credentials_present(settings: Settings) -> bool:
     )
 
 
-def _read_json(client: httpx.Client, method: str, url: str, **kwargs) -> dict:
-    try:
-        response = client.request(method, url, **kwargs)
-    except httpx.RequestError:
-        raise SourceError("network_error", "Gmail could not be reached.") from None
+def response_json(response: httpx.Response, *, refresh: bool = False) -> dict:
+    """Read a Google API result. Only documented machine-readable error fields are used."""
+    if response.status_code in (400, 401, 403):
+        failure = {}
+        if len(response.content) <= 64 * 1024:
+            try:
+                data = response.json()
+            except ValueError:
+                data = None
+            if isinstance(data, dict):
+                failure = data
+        error = failure.get("error")
+        reasons = {
+            value for value in (error, failure.get("error_subtype")) if isinstance(value, str)
+        }
+        if isinstance(error, dict):
+            for field in ("errors", "details"):
+                entries = error.get(field)
+                if isinstance(entries, list):
+                    reasons.update(
+                        item["reason"]
+                        for item in entries
+                        if isinstance(item, dict) and isinstance(item.get("reason"), str)
+                    )
+        if reasons & {"admin_policy_enforced", "domainPolicy", "ORG_RESTRICTION_VIOLATION"}:
+            raise SourceError(
+                "admin_restricted", "Google access is restricted by an administrator."
+            )
+        if refresh and response.status_code == 400 and error == "invalid_grant":
+            raise SourceError("invalid_grant", "Google rejected the refresh grant.")
+        if reasons & {
+            "insufficientPermissions",
+            "ACCESS_TOKEN_SCOPE_INSUFFICIENT",
+            "invalid_scope",
+        }:
+            raise SourceError("wrong_scope", "Google did not grant the required read permission.")
+        if reasons & {"rateLimitExceeded", "userRateLimitExceeded", "quotaExceeded"}:
+            raise SourceError("provider_unavailable", "Google is temporarily unavailable.")
     if response.status_code in (401, 403):
         raise SourceError(
             "unauthorized", "Gmail rejected the stored credentials; re-authorize Google access."
@@ -72,6 +106,23 @@ def _read_json(client: httpx.Client, method: str, url: str, **kwargs) -> dict:
     if not isinstance(payload, dict):
         raise SourceError("invalid_response", "Gmail returned an unexpected payload.")
     return payload
+
+
+def _read_json(client: httpx.Client, method: str, url: str, **kwargs) -> dict:
+    try:
+        response = client.request(method, url, **kwargs)
+    except httpx.RequestError:
+        raise SourceError("network_error", "Gmail could not be reached.") from None
+    return response_json(response, refresh=method == "POST" and url == TOKEN_URL)
+
+
+def refresh_form(client_id: str, client_secret: str, refresh_token: str) -> dict[str, str]:
+    return {
+        "client_id": client_id,
+        "client_secret": client_secret,
+        "refresh_token": refresh_token,
+        "grant_type": "refresh_token",
+    }
 
 
 def request_access_token(
@@ -92,12 +143,7 @@ def request_access_token(
         client,
         "POST",
         TOKEN_URL,
-        data={
-            "client_id": client_id,
-            "client_secret": client_secret,
-            "refresh_token": refresh_token,
-            "grant_type": "refresh_token",
-        },
+        data=refresh_form(client_id, client_secret, refresh_token),
     )
 
 
@@ -107,7 +153,7 @@ def checked_access_token(payload: dict) -> str:
     scope = payload.get("scope", SCOPE)
     if not isinstance(token, str) or not token:
         raise SourceError("unauthorized", "Gmail did not return an access token.")
-    if scope and SCOPE not in scope.split():
+    if scope and (not isinstance(scope, str) or SCOPE not in scope.split()):
         raise SourceError("wrong_scope", "The stored token lacks the Gmail read-only scope.")
     return token
 
@@ -132,9 +178,24 @@ def list_message_refs(
     client: httpx.Client, token: str, query: str, max_ids: int
 ) -> list[tuple[str, str]]:
     """Return up to ``max_ids`` (message id, thread id) pairs matching ``query``."""
+    return message_listing(client, token, query, max_ids)[0]
+
+
+def message_listing(
+    client: httpx.Client,
+    token: str,
+    query: str,
+    max_ids: int,
+    *,
+    admit: Callable[[], None] | None = None,
+) -> tuple[list[tuple[str, str]], bool]:
+    """List bounded references and whether enumeration finished below every cap."""
     refs: list[tuple[str, str]] = []
+    valid = True
     page_token = None
-    for _ in range(MAX_LIST_PAGES):
+    for page in range(MAX_LIST_PAGES):
+        if admit:
+            admit()
         params = {"q": query, "maxResults": min(LIST_PAGE_SIZE, max_ids - len(refs))}
         if page_token:
             params["pageToken"] = page_token
@@ -145,15 +206,20 @@ def list_message_refs(
             params=params,
             headers={"Authorization": f"Bearer {token}"},
         )
-        for item in payload.get("messages") or []:
-            if isinstance(item, dict) and isinstance(item.get("id"), str):
+        items = payload.get("messages", [])
+        if not isinstance(items, list):
+            raise SourceError("invalid_response", "Gmail returned an unexpected listing.")
+        for item in items:
+            if isinstance(item, dict) and isinstance(item.get("id"), str) and item["id"]:
                 refs.append((item["id"], str(item.get("threadId") or "")))
+            else:
+                valid = False
             if len(refs) >= max_ids:
-                return refs
+                return refs, False
         page_token = payload.get("nextPageToken")
         if not page_token:
-            break
-    return refs
+            return refs, valid and page + 1 < MAX_LIST_PAGES
+    return refs, False
 
 
 def fetch_message(client: httpx.Client, token: str, message_id: str) -> dict:

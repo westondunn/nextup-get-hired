@@ -34,7 +34,7 @@ pytestmark = pytest.mark.skipif(
 )
 PAIRS = [(f"{n:04d}", f"{n - 1:04d}" if n > 1 else "base") for n in range(1, 30)]
 # Revisions added after the pinned history are named oss_NNNN and continue the same chain.
-PAIRS += [("oss_0030", "0029"), ("oss_0031", "oss_0030")]
+PAIRS += [("oss_0030", "0029"), ("oss_0031", "oss_0030"), ("oss_0032", "oss_0031")]
 HEAD = PAIRS[-1][0]
 # Downgrade to base is not authorizable; 0001 is covered by INIT and the head <-> 0001 chain.
 ROUND_TRIPS = PAIRS[1:]
@@ -119,6 +119,11 @@ TABLES = {
         31,
         "id client_id client_secret_sealed refresh_token_sealed key_version state "
         "granted_scopes account_address connected_at created_at updated_at",
+    ),
+    "google_lifecycle": (
+        32,
+        "id epoch generation sync_paused imports_since gmail_last_success_at "
+        "calendar_last_success_at gmail_attempt_generation calendar_attempt_generation",
     ),
 }
 ADDED = {
@@ -403,7 +408,17 @@ def test_each_revision_round_trip_preserves_compatible_data(migration_database, 
     cli(engine, "downgrade", previous)
     assert snapshot(engine) == before
     cli(engine, "upgrade", revision)
-    assert snapshot(engine) == upgraded
+    assert equivalent_round_trip(snapshot(engine), upgraded)
+
+
+def equivalent_round_trip(actual, expected):
+    # Recreating the lifecycle table deliberately creates fresh fence identities.
+    for state in (actual, expected):
+        for row in state["rows"].get("google_lifecycle", []):
+            row["epoch"] = bool(row["epoch"])
+            row["generation"] = bool(row["generation"])
+            row["imports_since"] = bool(row["imports_since"])
+    return actual == expected
 
 
 def test_empty_database_full_chain_and_model_agreement(migration_database):
@@ -418,7 +433,7 @@ def test_empty_database_full_chain_and_model_agreement(migration_database):
     cli(migration_database, "downgrade", "0001")
     assert_revision(migration_database, "0001")
     cli(migration_database, "upgrade", "head")
-    assert snapshot(migration_database) == head
+    assert equivalent_round_trip(snapshot(migration_database), head)
     cli(migration_database, "check")
 
 
@@ -897,3 +912,49 @@ def test_google_connection_holds_one_row_of_sealed_values_only(migration_databas
     assert_revision(engine, "oss_0030")
     cli(engine, "upgrade", "oss_0031")
     assert connection() == []
+
+
+def test_google_lifecycle_migration_fences_existing_grant_and_preserves_pause(migration_database):
+    engine = migration_database
+    cli(engine, "upgrade", "oss_0031")
+    settings = Settings(token_key=SecretStr("migration-test-only-token-key-0123456789abcdef"))
+    client = token_vault.seal(
+        "synthetic-client-secret", purpose="google.client_secret", settings=settings
+    )
+    token = token_vault.seal(
+        "synthetic-refresh-token", purpose="google.refresh_token", settings=settings
+    )
+    execute(
+        engine,
+        "INSERT INTO google_connections (id, client_id, client_secret_sealed, "
+        "refresh_token_sealed, state) VALUES (1, 'synthetic-client', :client, :token, 'connected')",
+        client=client,
+        token=token,
+    )
+    execute(
+        engine,
+        "INSERT INTO correspondence_sync_settings (id, enabled, calendar_enabled) "
+        "VALUES (1, true, true)",
+    )
+    cli(engine, "upgrade", "oss_0032")
+    with engine.connect() as connection:
+        lifecycle = connection.execute(text("SELECT * FROM google_lifecycle")).mappings().one()
+        assert lifecycle["epoch"] is not None and lifecycle["generation"] is not None
+        assert lifecycle["imports_since"] is not None
+        assert not lifecycle["sync_paused"]
+        assert (
+            lifecycle["gmail_last_success_at"]
+            is lifecycle["calendar_last_success_at"]
+            is lifecycle["gmail_attempt_generation"]
+            is lifecycle["calendar_attempt_generation"]
+            is None
+        )
+    execute(engine, "UPDATE google_lifecycle SET sync_paused = true")
+    cli(engine, "downgrade", "oss_0031")
+    with engine.connect() as connection:
+        assert (
+            connection.scalar(text("SELECT refresh_token_sealed FROM google_connections")) == token
+        )
+        assert connection.execute(
+            text("SELECT enabled, calendar_enabled FROM correspondence_sync_settings")
+        ).one() == (False, False)

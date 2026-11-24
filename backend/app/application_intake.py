@@ -162,6 +162,8 @@ def apply_confirmation(
     company: str | None = None,
     title: str | None = None,
     stage: str = "applied",
+    *,
+    since: datetime | None = None,
 ) -> tuple[Pursuit, bool]:
     """Create, advance or link the application a message refers to. Returns (pursuit, created).
 
@@ -274,15 +276,16 @@ def apply_confirmation(
     message.pursuit_id = pursuit.id
     if message.thread_id:
         # The rest of the conversation belongs to the same application.
-        siblings = session.scalars(
-            select(Communication).where(
-                Communication.thread_id == message.thread_id,
-                Communication.source == message.source,
-                Communication.id != message.id,
-                Communication.pursuit_id.is_(None),
-                Communication.status != "dismissed",
-            )
-        ).all()
+        sibling_query = select(Communication).where(
+            Communication.thread_id == message.thread_id,
+            Communication.source == message.source,
+            Communication.id != message.id,
+            Communication.pursuit_id.is_(None),
+            Communication.status != "dismissed",
+        )
+        if since is not None:
+            sibling_query = sibling_query.where(Communication.created_at >= since)
+        siblings = session.scalars(sibling_query).all()
         for sibling in siblings:
             sibling.pursuit_id = pursuit.id
             sibling.updated_at = now
@@ -391,14 +394,19 @@ def undo_confirmation(session: Session, message: Communication, now: datetime | 
         )
 
 
-def run(session: Session, now: datetime | None = None) -> dict:
+def run(session: Session, now: datetime | None = None, *, since: datetime | None = None) -> dict:
     """Apply every unhandled high-confidence confirmation when the user opted in."""
     config = session.get(CorrespondenceSyncSettings, 1)
     if config is None or not config.auto_create_applications:
         return {"status": "disabled", "created": 0, "advanced": 0, "linked": 0}
+    # After a grant change, only automatically handle rows imported in this lifecycle.
+    eligible = select(Communication)
+    if since is not None:
+        eligible = eligible.where(
+            Communication.source == "gmail", Communication.created_at >= since
+        )
     candidates = session.scalars(
-        select(Communication)
-        .where(
+        eligible.where(
             Communication.direction == "inbound",
             Communication.status == "received",
             Communication.pursuit_id.is_(None),
@@ -411,13 +419,11 @@ def run(session: Session, now: datetime | None = None) -> dict:
     counts = {"created": 0, "advanced": 0, "linked": 0}
     # A confirmation applied before its sender could be read still gets its contact.
     for message in session.scalars(
-        select(Communication)
-        .where(
+        eligible.where(
             Communication.pursuit_id.is_not(None),
             Communication.contact_id.is_(None),
             Communication.detection["applied"]["pursuit_id"].astext.is_not(None),
-        )
-        .with_for_update()
+        ).with_for_update()
     ).all():
         contact, created = _ensure_contact(
             session, message, message.detection.get("company", ""), now or datetime.now(UTC)
@@ -436,7 +442,7 @@ def run(session: Session, now: datetime | None = None) -> dict:
         if message.detection.get("undone") or message.detection.get("applied"):
             continue
         try:
-            _, created = apply_confirmation(session, message, now)
+            _, created = apply_confirmation(session, message, now, since=since)
         except ValueError:
             continue
         outcome = message.detection["applied"]

@@ -1,6 +1,7 @@
 """Local session routes and store (docs/decisions/0001-local-session-boundary.md, layer 3)."""
 
 import logging
+from contextlib import nullcontext
 
 import pytest
 import route_helpers
@@ -305,6 +306,8 @@ PROTECTED = [
     ("PUT", "/api/correspondence"),
     ("POST", "/api/correspondence/sync"),
     ("GET", "/api/google/connection"),
+    ("DELETE", "/api/google/connection"),
+    ("POST", "/api/google/connection/test"),
     ("PUT", "/api/google/client"),
     ("POST", "/api/google/connect"),
 ]
@@ -320,6 +323,14 @@ def app_client(monkeypatch, redis):
     database = MagicMock()
     database.get.return_value = None
     database.scalar.return_value = 0
+    from app.models import GoogleLifecycle
+
+    life = GoogleLifecycle(id=1, sync_paused=False)
+    database.execute.return_value.one.return_value = (life, None, None)
+    database.get.side_effect = lambda model, *args, **kwargs: (
+        life if model is GoogleLifecycle else None
+    )
+    monkeypatch.setattr("app.google_lifecycle.action", lambda _: nullcontext())
     monkeypatch.setattr(local_session, "get_settings", lambda: Settings(setup_code=SecretStr(CODE)))
     monkeypatch.setattr(local_session.time, "time", lambda: redis.now)
     real_app.dependency_overrides[get_store] = lambda: SessionStore(redis)
@@ -349,11 +360,12 @@ def test_protected_routes_are_reached_with_a_session(app_client, monkeypatch, me
     monkeypatch.setattr("app.correspondence.get_settings", lambda: Settings())
     monkeypatch.setattr("app.google_connection.get_settings", lambda: Settings())
     monkeypatch.setattr("app.google_consent.get_settings", lambda: Settings())
+    monkeypatch.setattr("app.google_actions.get_settings", lambda: Settings())
     assert start(client).status_code == 204
     response = client.request(method, path, json={"enabled": "not-a-boolean"})
     # Past the session check: the route's own validation or state answers instead. A
     # route that only reports has nothing to refuse.
-    assert response.status_code in ((200,) if method == "GET" else (409, 422))
+    assert response.status_code in ((200,) if method in {"GET", "DELETE"} else (409, 422))
 
 
 @pytest.mark.parametrize("method,path", PROTECTED)

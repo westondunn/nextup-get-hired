@@ -722,6 +722,23 @@ class GoogleConnection(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
+class GoogleLifecycle(Base):
+    """Credential-free fencing and sync evidence for the singleton Google connection."""
+
+    __tablename__ = "google_lifecycle"
+    __table_args__ = (CheckConstraint("id = 1", name="single_google_lifecycle"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=False)
+    epoch: Mapped[UUID] = mapped_column()
+    generation: Mapped[UUID | None] = mapped_column()
+    sync_paused: Mapped[bool] = mapped_column(Boolean, server_default=text("false"))
+    imports_since: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    gmail_last_success_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    calendar_last_success_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    gmail_attempt_generation: Mapped[UUID | None] = mapped_column()
+    calendar_attempt_generation: Mapped[UUID | None] = mapped_column()
+
+
 class FollowUpRule(Base):
     __tablename__ = "follow_up_rules"
     __table_args__ = (UniqueConstraint("rule_key", name="follow_up_rule_key_unique"),)
