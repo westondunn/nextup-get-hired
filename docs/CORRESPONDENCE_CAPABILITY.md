@@ -2,6 +2,8 @@
 
 The maintainer accepted this contract on 2026-11-23 with amendments to mailbox identity and the preservation of user decisions. It defines what an adapter must demonstrate to import mail into NextUp under [decision 0002](decisions/0002-standards-first-interoperability.md). The proposal merged in [PR #65](https://github.com/westondunn/nextup-get-hired/pull/65). [Decision tracking](https://github.com/westondunn/nextup-get-hired/issues/24) · [Implementation and support status](INTEGRATIONS.md#current-state)
 
+The [second email adapter evaluation](SECOND_EMAIL_ADAPTER_EVALUATION.md) compares three candidates against this contract for [#25](https://github.com/westondunn/nextup-get-hired/issues/25).
+
 ## Operations and permissions
 
 | Clause | Requirement |
