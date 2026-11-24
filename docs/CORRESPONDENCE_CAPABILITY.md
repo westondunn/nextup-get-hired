@@ -1,6 +1,6 @@
 # Read-only correspondence capability contract
 
-This contract defines the requirements for importing mail into NextUp. It follows [decision 0002](decisions/0002-standards-first-interoperability.md) and is proposed for review in [#24](https://github.com/westondunn/nextup-get-hired/issues/24). See [Integrations and compatibility](INTEGRATIONS.md) for implementation and support status.
+The maintainer accepted this contract on 2026-11-23 with amendments to mailbox identity and the preservation of user decisions. It defines what an adapter must demonstrate to import mail into NextUp under [decision 0002](decisions/0002-standards-first-interoperability.md). The proposal merged in [PR #65](https://github.com/westondunn/nextup-get-hired/pull/65). [Decision tracking](https://github.com/westondunn/nextup-get-hired/issues/24) · [Implementation and support status](INTEGRATIONS.md#current-state)
 
 ## Operations and permissions
 
@@ -30,6 +30,8 @@ The adapter reads from the mailbox provider and returns only the fields below to
 
 Identify a message by provider, mailbox namespace and message ID together. Preserve provenance when a connection is removed. Keep separate records for equal IDs in different namespaces. Any cross-provider matching would need independent evidence.
 
+On reconnect, reuse a namespace only when the provider and stable mailbox identity match. A credential change alone cannot establish that match. If a legacy row or checkpoint has uncertain ownership, preserve it. Leave the row unmerged and the checkpoint unused until ownership is established. The single-mailbox external classifier keeps its existing `gmail_message_id` key. Leave a hint unapplied if the target mailbox or message is ambiguous.
+
 Treat message text and headers as untrusted input. Render them as inert text, avoid attachment downloads and remote content loads, and exclude message content, raw provider payloads and credentials from default logs and user-facing errors. The adapter sends none of the normalized fields to any other processor. The [external classifier interface](CORRESPONDENCE_SYNC.md) is a separate path with its existing contract. Calendar imports require a separate contract.
 
 ## Sync and preservation
@@ -37,8 +39,9 @@ Treat message text and headers as untrusted input. Render them as inert text, av
 - **Duplicates and retries.** Import the same identity idempotently across repeated pages, partial failures and concurrent runs. Keep a durable checkpoint only for work already accounted for in local storage. A retry can replay committed work without creating rows or replacing user edits.
 - **Out-of-order delivery.** Accept messages with equal or older timestamps within the declared import coverage. Advance a cursor only after the covered pages are accounted for. For a bounded rescan, overlap the scan window, deduplicate by identity and document how far back late deliveries can be found.
 - **Provider deletions.** A missing result or provider deletion leaves previously imported records intact. A message listed and then removed can be recorded as missing for that scan. Avoid treating a mailbox-wide failure as a message deletion.
-- **Cursors.** Scope progress to the mailbox and import filter. Preserve continuation for incomplete pages. If a cursor expires or the filter changes, rebuild it from a documented rescan that retains all local records. Keep progress for different providers and mailboxes independent.
-- **Local records.** Re-sync, retry, disconnect and provider changes preserve imported records, user edits and status, existing application and contact links, and NextUp's own detection. Disconnect stops future reads through that connection and clears or disables its credentials. A provider change starts separate progress without moving existing data to the new provider. Reconnecting the same mailbox uses its existing namespace.
+- **Cursors.** Resume from a checkpoint only when it is valid for the verified mailbox and current import filter. Preserve continuation for incomplete pages. On filter change or cursor expiry, rescan in the same mailbox namespace and retain its local records.
+- **Local records.** Replay, retry, disconnect and provider changes preserve imported records, user-authored content, user-chosen status, application and contact links, and applied or undone decisions. A versioned local rule may update machine-derived detection within its documented scope. It must respect those decisions and established mailbox ownership.
+- **Disconnect.** Stop future reads through the disconnected connection and clear or disable its credentials. A separately configured fallback credential must not inherit the disconnected mailbox's progress. Coordinate queued and in-flight work with [issue #11](https://github.com/westondunn/nextup-get-hired/issues/11). A provider change starts separate progress and keeps the original records in NextUp without transferring them to the new provider.
 
 ## Shared errors
 
@@ -59,7 +62,7 @@ Expose a stable category and a short, safe explanation. Include partial import c
 
 ## Gmail mapping
 
-Compared with main at `6e778c6`. The source is [gmail.py](../backend/app/sources/gmail.py), with credential resolution in [google_credentials.py](../backend/app/google_credentials.py) and import behavior in [correspondence_tasks.py](../backend/app/correspondence_tasks.py).
+The original mapping at `6e778c6` was checked again at [`33ef4e2`](https://github.com/westondunn/nextup-get-hired/commit/33ef4e24988c5becfd5ceb48ea3e34fa50354493). The source is [gmail.py](../backend/app/sources/gmail.py), with credential resolution in [google_credentials.py](../backend/app/google_credentials.py) and import behavior in [correspondence_tasks.py](../backend/app/correspondence_tasks.py). [Hosted CI for the reviewed commit](https://github.com/westondunn/nextup-get-hired/actions/runs/45283925793)
 
 | Clause | Current Gmail behavior | Gap |
 | --- | --- | --- |
@@ -69,16 +72,17 @@ Compared with main at `6e778c6`. The source is [gmail.py](../backend/app/sources
 | Incremental sync | The worker uses a Gmail `after:` query based on the stored timestamp or initial lookback. | Coverage is tied to Gmail and there is no provider change cursor or overlap guarantee. |
 | Credential permissions | Gmail requests `gmail.readonly`. Stored grants track capability scopes, and the refresh check looks for the Gmail scope when scope information is present. A configured token can also be used. | No shared declaration of effective permissions, including broader or unknown access for configured credentials. |
 | Message fields | `ParsedMessage` returns the message and thread IDs, names and addresses, subject, bounded body, time and flags. It takes the first parsed recipient, can fall back to a snippet, and derives auto-replies from `Auto-Submitted`. | Optional strings use empty values. Missing or invalid timestamps can become the epoch or current time. Boolean fields do not distinguish unknown from false. |
-| Identity and provenance | The worker stores `source=gmail`, the original message ID and optional thread ID. | Deduplication uses source and message ID without a mailbox namespace. |
+| Identity and provenance | The worker stores `source=gmail`, the original message ID and optional thread ID. The [unique index](https://github.com/westondunn/nextup-get-hired/blob/33ef4e24988c5becfd5ceb48ea3e34fa50354493/backend/app/models.py#L598-L604) uses source and message ID. | Two Gmail mailboxes cannot store separate records for the same ID. Legacy rows carry no mailbox namespace to verify on reconnect. |
+| Classifier hints | The [classifier join](https://github.com/westondunn/nextup-get-hired/blob/33ef4e24988c5becfd5ceb48ea3e34fa50354493/backend/app/email_classifications.py#L81-L98) matches a raw `gmail_message_id` to a Gmail row. | A multi-mailbox importer would need to resolve the target unambiguously while preserving the existing external key. |
 | Data flow and untrusted input | The worker imports locally and uses local rules. Gmail fetches message payloads without a separate attachment or remote content fetch, converts HTML to text and uses fixed provider error messages. The adapter sends no fields to a classifier. | There is no shared normalization or redaction guarantee across providers. |
 | Duplicates and retries | The worker locks the settings row and skips IDs already imported. A source error can leave a partial import with the previous cursor. | The pending batch does not deduplicate repeated IDs within the same listing. |
 | Out-of-order delivery | The cursor advances to the newest imported timestamp after processing the listed batch. | Older arrivals can fall outside the next query, and a capped listing can appear complete. |
 | Provider deletions | Absence from the listing does not remove stored rows. | A fetch returning HTTP 404 maps to `provider_rejected`, so later messages can be delayed. |
 | Cursor lifecycle | The singleton settings row holds the Gmail query and timestamp. Changing the query resets progress to the initial lookback. | No per-mailbox continuation or shared checkpoint and recovery semantics. |
-| Local records | The worker skips already imported messages and can fill missing local detection. | No disconnect or provider switch flow demonstrates preservation across connection changes. |
+| Local records | The import loop skips known IDs. A [separate pass](https://github.com/westondunn/nextup-get-hired/blob/33ef4e24988c5becfd5ceb48ea3e34fa50354493/backend/app/correspondence_tasks.py#L164-L210) revisits Gmail rows with missing or older detection and retains applied or undone decisions. For a legacy inbound row with missing detection whose sender matches the current mailbox address, it sets direction to outbound, sets status to sent and fills a missing sent time. | The pass spans Gmail rows across the source and does not check whether the user chose the status. The [legacy correction test](https://github.com/westondunn/nextup-get-hired/blob/33ef4e24988c5becfd5ceb48ea3e34fa50354493/backend/tests/test_gmail.py#L380-L388) exercises a received row. Preservation for edited rows and across connection changes still needs evidence. |
 | Shared errors | `SourceError` codes surface through sync status. Gmail already emits several shared categories. Credential resolution also uses `not_connected`, `needs_reauthorization`, `capability_not_granted`, `connection_unreadable` and `connection_not_updated`. | No shared mapping. For example, a refresh rejected with HTTP 400 can surface as `provider_rejected` even when the grant was revoked. Connection-specific statuses need mapping to setup, reauthorization, permission or connection errors. |
 
-The storage shape for per-connection settings and coexistence with the classifier's `gmail_message_id` key are open decisions. This contract does not select a protocol or design a migration.
+The [implementation planning draft](planning/issue-drafts/correspondence-implementation-decomposition.md) covers storage for mailbox identity and checkpoints, migration of legacy rows, and compatibility with the existing classifier key. These design choices and adapter conformance remain open. [Issue #25](https://github.com/westondunn/nextup-get-hired/issues/25) can use this contract to evaluate a second adapter or recommend deferral.
 
 ## Required synthetic adapter tests
 
@@ -86,10 +90,11 @@ Every adapter must pass these tests at the adapter and local import boundary, us
 
 | Case | Expected result |
 | --- | --- |
-| Duplicate delivery | Repeat a reference within a page, across pages and on retry. Keep one row per identity. Equal IDs from different mailboxes or providers remain distinct. |
+| Duplicate delivery | Repeat a reference within a page, across pages, on retry and in concurrent runs. Keep one row per identity. Equal IDs from different mailboxes or providers remain distinct. |
+| Reconnect and uncertain ownership | Rotate a credential for a verified mailbox and resume its valid checkpoint. Connect a different mailbox with the same message ID and keep its record and progress separate. Leave legacy rows and checkpoints of unknown ownership intact. An ambiguous classifier hint leaves all candidate rows untouched. |
 | Out-of-order delivery | Deliver an older and an equal-timestamp message after a newer one within the declared coverage. Import each once, including across a page or batch limit. |
 | Revoked credential | Reject the grant and verify the reauthorization status, unchanged checkpoint for unprocessed work and preserved local data. |
 | Provider outage | Interrupt a paged scan with a timeout, rate limit or server error. Show a retryable status and resume with no gaps or duplicates. |
-| Preservation of user edits | Edit a record, link it to an application and contact, and save its detection. Replay the message, disconnect and switch providers. The original row, its links, edits and detection survive. |
-| Provider deletion and cursor recovery | Remove a listed message before fetch and expire a cursor. Preserve imported records, process later messages and recover using the documented rescan. |
+| Preservation of user edits | Replay a legacy record with edited content, a dismissed status and application and contact links. Exercise retry, disconnect, provider change and a rule-version change. Preserve content, chosen status, links, and applied or undone decisions. Only eligible machine-derived detection may change. A fallback credential does not resume the disconnected mailbox's checkpoint. |
+| Provider deletion and cursor recovery | Remove a listed message before fetch and process later messages. Separately expire a cursor and change the filter. Each triggers the documented rescan in the original namespace and retains local records. |
 | Permissions and normalization | Simulate broader, unknown and missing grants, absent optional fields and hostile message content. Verify permission reporting, inert bounded text, read-only mailbox requests and absence of message content in logs or processor requests. |

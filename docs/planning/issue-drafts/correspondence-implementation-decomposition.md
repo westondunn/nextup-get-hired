@@ -10,9 +10,9 @@ storage boundaries, Gmail recovery behavior, and lifecycle preservation before c
 
 ## Current state
 
-`docs/CORRESPONDENCE_CAPABILITY.md` maps Gmail gaps, including missing mailbox namespaces,
-continuations, overlap guarantees, per-connection checkpoints, and shared error mappings. The
-contract still awaits acceptance in #24. Reviewed at commit `f9024aa` (`main`) on 2026-11-23.
+The [accepted contract](../../CORRESPONDENCE_CAPABILITY.md#gmail-mapping) maps Gmail gaps at
+`33ef4e2`, including missing mailbox namespaces, continuations, overlap guarantees,
+per-connection checkpoints, and shared error mappings.
 
 ## Scope
 
@@ -31,8 +31,9 @@ other provider receives it.
 
 ## Dependencies and unresolved decisions
 
-Blocked by acceptance of #24. Resolve coexistence with `gmail_message_id`, stable mailbox identity,
-checkpoint ownership, and connection cardinality before filing implementation children.
+The maintainer accepted the contract tracked in #24. Before filing implementation children, decide
+how to store mailbox identity and checkpoint ownership, handle legacy records of uncertain origin,
+and support the chosen connection cardinality while preserving the external `gmail_message_id` key.
 
 ## Acceptance criteria
 
@@ -44,7 +45,8 @@ checkpoint ownership, and connection cardinality before filing implementation ch
 ## Security, privacy, failure handling and data preservation
 
 Message content remains untrusted and absent from logs. Imported records, user edits, links, and
-detection survive retries and provider changes. Any future schema change uses a new `oss_NNNN`.
+applied or undone decisions survive retries and provider changes. Versioned local rules may update
+eligible machine-derived detection. Any future schema change uses a new `oss_NNNN`.
 
 ## Evidence expected
 

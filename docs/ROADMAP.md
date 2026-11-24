@@ -164,18 +164,18 @@ The core preview requires no enabled integration. The maintainer accepted the po
   - Complete when: the maintainer sets the record's status and the public documents contain none of the excluded claims
   - Evidence: [PR #29](https://github.com/westondunn/nextup-get-hired/pull/29) recorded the agreed direction. [PR #69](https://github.com/westondunn/nextup-get-hired/pull/69) reconciled the subsequent decisions and documents. The maintainer accepted the amended policy on 2026-11-23 following the [review of public claims in the repository and wiki](decisions/0002-standards-first-interoperability.md#acceptance-review).
 
-- [ ] **Outcome: a shared read-only correspondence capability contract is defined**
+- [x] **Outcome: a shared read-only correspondence capability contract is defined**
   - Tracking: [#24](https://github.com/westondunn/nextup-get-hired/issues/24)
   - Priority and dependencies: provisional; follows [#23](https://github.com/westondunn/nextup-get-hired/issues/23)
   - Suggested branch: `docs/24-correspondence-capability-contract`
   - Contributor notes: a contract document under `docs/`; maps the existing Gmail adapter onto it; no code change, no renamed stored keys
   - Contribution availability: maintainer-only
   - Complete when: the maintainer accepts the merged contract with the Gmail mapping and its gaps
-  - Evidence: [the proposed contract](CORRESPONDENCE_CAPABILITY.md), including the Gmail mapping and required synthetic tests, merged in [PR #65](https://github.com/westondunn/nextup-get-hired/pull/65) ([`759e53c`](https://github.com/westondunn/nextup-get-hired/commit/759e53cd3dfa930de53a2c74c307aa7bf1276cbd)). Maintainer acceptance in [#24](https://github.com/westondunn/nextup-get-hired/issues/24) and future adapter validation are pending.
+  - Evidence: the proposal merged in [PR #65](https://github.com/westondunn/nextup-get-hired/pull/65) ([`759e53c`](https://github.com/westondunn/nextup-get-hired/commit/759e53cd3dfa930de53a2c74c307aa7bf1276cbd)). On 2026-11-23 the maintainer accepted the [contract](CORRESPONDENCE_CAPABILITY.md) with amendments covering mailbox identity and preservation of user decisions. The [Gmail mapping](CORRESPONDENCE_CAPABILITY.md#gmail-mapping) records gaps in the current implementation. Adapter conformance and provider-specific validation remain open.
 
 - [ ] **Outcome: a second, independent email adapter has been evaluated**
   - Tracking: [#25](https://github.com/westondunn/nextup-get-hired/issues/25)
-  - Priority and dependencies: provisional; blocked by [#24](https://github.com/westondunn/nextup-get-hired/issues/24)
+  - Priority and dependencies: provisional. Evaluation uses the [accepted correspondence contract](CORRESPONDENCE_CAPABILITY.md). GitHub tracks [#24](https://github.com/westondunn/nextup-get-hired/issues/24) as the blocking issue.
   - Suggested branch: `docs/25-second-email-adapter-evaluation`
   - Contributor notes: bounded discovery; no provider or protocol chosen in advance; no implementation
   - Contribution availability: maintainer-only
