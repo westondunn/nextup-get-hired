@@ -19,7 +19,14 @@ from app.config import Settings
 from app.correspondence_tasks import suggest_pursuit, sync_gmail
 from app.db import get_session
 from app.main import app
-from app.models import Communication, Contact, CorrespondenceSyncSettings, GoogleConnection, Pursuit
+from app.models import (
+    Communication,
+    Contact,
+    CorrespondenceSyncSettings,
+    GoogleConnection,
+    GoogleLifecycle,
+    Pursuit,
+)
 from app.sources import gmail
 from app.sources.common import SourceError
 
@@ -209,7 +216,23 @@ def fake_session(config, contacts=(), pursuits=(), known=(), unclassified=(), co
     """A MagicMock session that answers the four queries the sync performs."""
     session = MagicMock()
     # The sync reads its own settings and the stored Google connection, if there is one.
-    rows = {CorrespondenceSyncSettings: config, GoogleConnection: connection}
+    lifecycle = GoogleLifecycle(
+        id=1,
+        epoch=uuid4(),
+        generation=uuid4() if connection is not None and connection.refresh_token_sealed else None,
+        sync_paused=False,
+    )
+    rows = {
+        CorrespondenceSyncSettings: config,
+        GoogleConnection: connection,
+        GoogleLifecycle: lifecycle,
+    }
+    session.lifecycle = lifecycle
+    session.scalar.side_effect = lambda stmt: (
+        next((r.id for r in unclassified if r.detection is None), None)
+        if "communications.detection IS NULL" in str(stmt)
+        else None
+    )
     session.get.side_effect = lambda model, *args, **kwargs: rows[model]
     session.added = []
     session.add.side_effect = session.added.append
@@ -421,7 +444,10 @@ def test_sync_records_provider_failure_without_raising():
 @pytest.fixture
 def api_session(local_session):
     database = MagicMock()
-    database.get.return_value = None
+    lifecycle = GoogleLifecycle(id=1, epoch=uuid4(), sync_paused=False)
+    database.get.side_effect = lambda model, *args, **kwargs: (
+        lifecycle if model is GoogleLifecycle else None
+    )
     database.scalar.return_value = 0
     app.dependency_overrides[get_session] = lambda: database
     yield database

@@ -70,6 +70,14 @@ def refresh_access_token(client: httpx.Client, settings: Settings) -> str:
 def list_events(
     client: httpx.Client, token: str, start: datetime, end: datetime, max_events: int = MAX_EVENTS
 ) -> list[dict]:
+    return event_listing(client, token, start, end, max_events)[0]
+
+
+def event_listing(
+    client: httpx.Client, token: str, start: datetime, end: datetime, max_events: int = MAX_EVENTS
+) -> tuple[list[dict], bool]:
+    """Read one bounded page and retain whether the provider enumeration was complete."""
+    limit = max(1, min(max_events, MAX_EVENTS))
     payload = _read_json(
         client,
         "GET",
@@ -79,14 +87,17 @@ def list_events(
             "timeMax": end.astimezone(UTC).isoformat().replace("+00:00", "Z"),
             "singleEvents": "true",
             "orderBy": "startTime",
-            "maxResults": max(1, min(max_events, MAX_EVENTS)),
+            "maxResults": limit,
         },
         headers={"Authorization": f"Bearer {token}"},
     )
     items = payload.get("items")
     if not isinstance(items, list):
         raise SourceError("invalid_response", "Calendar returned an unexpected payload.")
-    return [item for item in items if isinstance(item, dict)]
+    events = [item for item in items[:limit] if isinstance(item, dict)]
+    return events, not payload.get("nextPageToken") and len(items) < limit and len(events) == len(
+        items
+    )
 
 
 # Names the zone database lists that are not real places: the host's own zone and a placeholder.

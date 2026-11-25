@@ -78,10 +78,12 @@ def apply(session: Session, message: Communication, row: EmailClassification, no
     return suggested, verdict is False
 
 
-def reconcile(session: Session, now: datetime | None = None) -> dict:
+def reconcile(
+    session: Session, now: datetime | None = None, *, since: datetime | None = None
+) -> dict:
     """Apply every unapplied classification whose Gmail message has been imported."""
     now = now or datetime.now(UTC)
-    pairs = session.execute(
+    query = (
         select(EmailClassification, Communication)
         .join(
             Communication,
@@ -91,7 +93,12 @@ def reconcile(session: Session, now: datetime | None = None) -> dict:
         .where(EmailClassification.applied_at.is_(None))
         .order_by(EmailClassification.classified_at)
         .with_for_update(of=EmailClassification, skip_locked=True)
-    ).all()
+    )
+    if since is not None:
+        query = query.where(
+            Communication.created_at >= since, EmailClassification.classified_at >= since
+        )
+    pairs = session.execute(query).all()
     counts = {"applied": 0, "suggested": 0, "disagreements": 0}
     for row, message in pairs:
         suggested, disagreed = apply(session, message, row, now)

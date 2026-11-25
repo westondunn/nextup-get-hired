@@ -99,12 +99,12 @@ This remains the first connection to be completed and validated. It is not suppo
 
 - [ ] **Outcome: a user can check, renew and remove a Google connection**
   - Tracking: [#11](https://github.com/westondunn/nextup-get-hired/issues/11)
-  - Priority and dependencies: P1; blocked by [#10](https://github.com/westondunn/nextup-get-hired/issues/10)
+  - Priority and dependencies: P1. The [Google connect prerequisite](https://github.com/westondunn/nextup-get-hired/issues/10#issuecomment-7147578227) is complete.
   - Suggested branch: `feature/11-google-connection-lifecycle`
   - Contributor notes: `backend/app/correspondence.py`, `backend/app/correspondence_tasks.py`
   - Contribution availability: maintainer-only
   - Complete when: every connection state, including revoked and unreachable, is tested
-  - Evidence: pending
+  - Backend implementation and synthetic verification: [PR #78](https://github.com/westondunn/nextup-get-hired/pull/78). The full Settings experience and clean-machine provider checks have separate gates.
 
 - [ ] **Outcome: Settings shows the Google connection state and actions**
   - Tracking: [#12](https://github.com/westondunn/nextup-get-hired/issues/12)
@@ -144,7 +144,7 @@ This remains the first connection to be completed and validated. It is not suppo
 
 - [ ] **Outcome: the Google setup is validated from a clean machine**
   - Tracking: [#14](https://github.com/westondunn/nextup-get-hired/issues/14)
-  - Priority and dependencies: P1; blocked by [#10](https://github.com/westondunn/nextup-get-hired/issues/10), [#11](https://github.com/westondunn/nextup-get-hired/issues/11) and [#12](https://github.com/westondunn/nextup-get-hired/issues/12); a live-account test needs separate maintainer approval
+  - Priority and dependencies: P1. The [Google connect prerequisite](https://github.com/westondunn/nextup-get-hired/issues/10#issuecomment-7147578227) is complete., [#11](https://github.com/westondunn/nextup-get-hired/issues/11) and [#12](https://github.com/westondunn/nextup-get-hired/issues/12); a live-account test needs separate maintainer approval
   - Suggested branch: `docs/14-google-oauth-setup`
   - Contributor notes: setup guide under `docs/`, README status table
   - Contribution availability: maintainer-only
@@ -180,7 +180,7 @@ The core preview requires no enabled integration. The maintainer accepted the in
   - Contributor notes: bounded discovery; no provider or protocol chosen in advance; no implementation
   - Contribution availability: maintainer-only
   - Complete when: a written evaluation ends in one recommendation, or in a recommendation not to proceed
-  - Evidence: pending
+  - Evidence: the [merged evaluation](https://github.com/westondunn/nextup-get-hired/pull/76) compares Microsoft Graph, OAuth-capable IMAP and JMAP and recommends deferring a second adapter. The maintainer decision belongs to [#25](https://github.com/westondunn/nextup-get-hired/issues/25).
 
 - [x] **Outcome: an optional AI task contract defines separate connectivity and quality checks**
   - Tracking: [#26](https://github.com/westondunn/nextup-get-hired/issues/26)

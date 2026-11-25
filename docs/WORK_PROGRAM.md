@@ -40,8 +40,8 @@ The exact assignment and any validation model are metadata in each [agent prompt
 ## Work order
 
 1. **Governance and truth.** The maintainer accepted the interoperability policy (#23), the
-   correspondence contract (#24), and the core first-run design (#28). Audit #10 evidence,
-   reconcile the live repository rules with the documents, and make workflow lint cover every
+   correspondence contract (#24), and the core first-run design (#28). The [#10 connect evidence](https://github.com/westondunn/nextup-get-hired/issues/10#issuecomment-7147578227) is complete.
+   Reconcile the live repository rules with the documents, and make workflow lint cover every
    checked-in workflow.
 2. **Core public preview:** choose the first platform/packaging path, implement guided setup and
    in-application first run, fix the Today defect, establish the application accessibility
@@ -65,12 +65,10 @@ parallel only when it does not delay core evidence or weaken the off-by-default 
 | Issue | Next action | Prompt |
 | --- | --- | --- |
 | [#3](https://github.com/westondunn/nextup-get-hired/issues/3) | Refresh the stale integration tracker after child decisions; keep it open | [Tracker reconciliation](prompts/open/03-integration-readiness-tracker.md) |
-| [#10](https://github.com/westondunn/nextup-get-hired/issues/10) | Audit merged implementation evidence only; do not reimplement | [Google connect evidence](prompts/open/10-google-connect-evidence.md) |
 | [#11](https://github.com/westondunn/nextup-get-hired/issues/11) | Implement lifecycle, test, reauthorization, disconnect/revocation, and preservation | [Connection lifecycle](prompts/open/11-google-connection-lifecycle.md) |
 | [#12](https://github.com/westondunn/nextup-get-hired/issues/12) | Extend the existing card after #11; do not rebuild PR #56 | [Settings lifecycle](prompts/open/12-google-settings-lifecycle.md) |
 | [#14](https://github.com/westondunn/nextup-get-hired/issues/14) | Keep blocked through #11, #12, guarded enablement, and live-account approval | [Clean-machine Google validation](prompts/open/14-google-clean-machine-validation.md) |
-| [#25](https://github.com/westondunn/nextup-get-hired/issues/25) | Evaluate Microsoft Graph, OAuth-capable IMAP, and JMAP against the [accepted contract](CORRESPONDENCE_CAPABILITY.md). Deferral is an option. | [Second-adapter evaluation](prompts/open/25-second-email-adapter-evaluation.md) |
-| [#28](https://github.com/westondunn/nextup-get-hired/issues/28) | The [design is accepted](CORE_ONBOARDING.md). Review the completion evidence and closure. Proposed implementation issues await separate publication approval. | [Onboarding acceptance](prompts/open/28-core-onboarding-acceptance.md) |
+| [#25](https://github.com/westondunn/nextup-get-hired/issues/25) | Review the [merged evaluation](https://github.com/westondunn/nextup-get-hired/pull/76) recommending deferral of a second adapter. | [Second-adapter evaluation](prompts/open/25-second-email-adapter-evaluation.md) |
 
 ## Proposed issue drafts
 

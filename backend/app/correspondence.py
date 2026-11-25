@@ -11,10 +11,15 @@ from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
-from app import google_credentials
+from app import google_credentials, google_lifecycle
 from app.application_intake import ensure_review_rule
 from app.config import get_settings
-from app.correspondence_tasks import review_count, sync_calendar_task, sync_gmail_task
+from app.correspondence_tasks import (
+    correspondence_status,
+    review_count,
+    sync_calendar_task,
+    sync_gmail_task,
+)
 from app.db import get_session
 from app.followup_tasks import INBOUND_REPLY_RULE
 from app.local_session import require_session
@@ -65,6 +70,9 @@ def _out(config: CorrespondenceSyncSettings | None, session: Session) -> dict:
         if config
         else CorrespondenceInput().model_dump()
     )
+    lifecycle = google_lifecycle.lifecycle_row(session)
+    if lifecycle.sync_paused:
+        body.update(enabled=False, calendar_enabled=False)
     return {
         **body,
         "live_enabled": settings.gmail_sync_enabled,
@@ -74,14 +82,16 @@ def _out(config: CorrespondenceSyncSettings | None, session: Session) -> dict:
         "calendar_credentials_present": google_credentials.usable(session, settings, "calendar"),
         "interval_seconds": settings.gmail_sync_interval_seconds,
         "last_run_at": config.last_run_at if config else None,
-        "last_status": config.last_status if config else "not_run",
+        "last_status": correspondence_status(config.last_status) if config else "not_run",
         "last_error": config.last_error if config else "",
         "last_imported": config.last_imported if config else 0,
         "cursor_epoch": config.cursor_epoch if config else None,
         "calendar_live_enabled": settings.calendar_sync_enabled,
         "calendar_interval_seconds": settings.calendar_sync_interval_seconds,
         "calendar_last_run_at": config.calendar_last_run_at if config else None,
-        "calendar_last_status": config.calendar_last_status if config else "not_run",
+        "calendar_last_status": correspondence_status(config.calendar_last_status)
+        if config
+        else "not_run",
         "calendar_last_error": config.calendar_last_error if config else "",
         "calendar_last_imported": config.calendar_last_imported if config else 0,
         "review_count": review_count(session),
@@ -99,20 +109,31 @@ def save_correspondence(body: CorrespondenceInput, session: Database):
     settings = get_settings()
     # Turning a sync on needs its flag in configuration and credentials it could use
     # (decision 0003, section 9).
-    if body.enabled:
-        if not settings.gmail_sync_enabled:
-            raise HTTPException(409, GMAIL_SWITCHED_OFF)
-        if not google_credentials.usable(session, settings, "gmail"):
-            raise HTTPException(409, GMAIL_NOT_CONNECTED)
-    if body.calendar_enabled:
-        if not settings.calendar_sync_enabled:
-            raise HTTPException(409, CALENDAR_SWITCHED_OFF)
-        if not google_credentials.usable(session, settings, "calendar"):
-            raise HTTPException(409, CALENDAR_NOT_CONNECTED)
+    if body.enabled and not settings.gmail_sync_enabled:
+        raise HTTPException(409, GMAIL_SWITCHED_OFF)
+    if body.calendar_enabled and not settings.calendar_sync_enabled:
+        raise HTTPException(409, CALENDAR_SWITCHED_OFF)
     session.execute(insert(CorrespondenceSyncSettings).values(id=1).on_conflict_do_nothing())
     config = session.get(CorrespondenceSyncSettings, 1, with_for_update=True)
-    if config.query != body.query:
-        config.cursor_epoch = None  # A new query must re-scan the initial window.
+    lifecycle = google_lifecycle.lifecycle_row(session, lock=True)
+    if body.enabled and not google_credentials.usable(session, settings, "gmail"):
+        raise HTTPException(409, GMAIL_NOT_CONNECTED)
+    if body.calendar_enabled and not google_credentials.usable(session, settings, "calendar"):
+        raise HTTPException(409, CALENDAR_NOT_CONNECTED)
+    # A filter change, or a restart after a pause, requires a fresh covered window.
+    if config.query != body.query or (
+        body.enabled and (lifecycle.sync_paused or not config.enabled)
+    ):
+        config.cursor_epoch = None
+        lifecycle.gmail_attempt_generation = None
+        lifecycle.gmail_last_success_at = None
+    if config.calendar_lookahead_days != body.calendar_lookahead_days or (
+        body.calendar_enabled and (lifecycle.sync_paused or not config.calendar_enabled)
+    ):
+        lifecycle.calendar_attempt_generation = None
+        lifecycle.calendar_last_success_at = None
+    if body.enabled or body.calendar_enabled:
+        lifecycle.sync_paused = False
     for key, value in body.model_dump().items():
         setattr(config, key, value)
     config.updated_at = datetime.now(UTC)
@@ -149,10 +170,20 @@ def _ensure_reply_rule(session: Session) -> None:
 def run_sync(session: Database):
     config = session.get(CorrespondenceSyncSettings, 1)
     tasks = []
-    if config is not None and config.enabled:
-        tasks.append(("gmail", sync_gmail_task))
-    if config is not None and config.calendar_enabled:
-        tasks.append(("calendar", sync_calendar_task))
+    if config is not None and not google_lifecycle.lifecycle_row(session).sync_paused:
+        settings = get_settings()
+        if (
+            config.enabled
+            and settings.gmail_sync_enabled
+            and google_credentials.usable(session, settings, "gmail")
+        ):
+            tasks.append(("gmail", sync_gmail_task))
+        if (
+            config.calendar_enabled
+            and settings.calendar_sync_enabled
+            and google_credentials.usable(session, settings, "calendar")
+        ):
+            tasks.append(("calendar", sync_calendar_task))
     if not tasks:
         raise HTTPException(409, "Turn on Gmail or Calendar sync before requesting a check.")
     try:

@@ -25,6 +25,10 @@ AUTHORIZATION_URL = "https://accounts.google.com/o/oauth2/v2/auth"
 TOKEN_URL = gmail.TOKEN_URL
 REVOCATION_URL = "https://oauth2.googleapis.com/revoke"
 PRIMARY_CALENDAR_URL = "https://www.googleapis.com/calendar/v3/calendars/primary"
+ACCOUNT_LOOKUPS = {
+    "gmail": (f"{gmail.API_BASE}/profile", "emailAddress"),
+    "calendar": (PRIMARY_CALENDAR_URL, "id"),
+}
 
 # One capability never implies the other (decision 0003, section 5).
 CAPABILITY_SCOPES = {"gmail": gmail.SCOPE, "calendar": google_calendar.SCOPE}
@@ -139,6 +143,14 @@ def exchange_code(
     return Grant(access_token=access_token, refresh_token=refresh_token, scopes=frozenset(scopes))
 
 
+def account_address(payload: dict, field: str) -> str:
+    value = payload.get(field)
+    address = value.strip().lower() if isinstance(value, str) else ""
+    if len(address) > 320 or not ADDRESS.fullmatch(address):
+        raise SourceError("no_account", NO_ACCOUNT)
+    return address
+
+
 def account_addresses(client: httpx.Client, settings: Settings, grant: Grant) -> tuple[str, ...]:
     """Every address the grant names for the account that consented. The first is stored.
 
@@ -148,11 +160,7 @@ def account_addresses(client: httpx.Client, settings: Settings, grant: Grant) ->
     flow may cover only one of them and still has to recognize the same account.
     """
     require_live_requests(settings)
-    lookups = []
-    if gmail.SCOPE in grant.scopes:
-        lookups.append((f"{gmail.API_BASE}/profile", "emailAddress"))
-    if google_calendar.SCOPE in grant.scopes:
-        lookups.append((PRIMARY_CALENDAR_URL, "id"))
+    lookups = [ACCOUNT_LOOKUPS[name] for name in grant.capabilities()]
     if not lookups:
         raise SourceError("no_account", NO_ACCOUNT)
     addresses = []
@@ -160,10 +168,7 @@ def account_addresses(client: httpx.Client, settings: Settings, grant: Grant) ->
         payload = gmail._read_json(
             client, "GET", url, headers={"Authorization": f"Bearer {grant.access_token}"}
         )
-        value = payload.get(field)
-        address = value.strip().lower() if isinstance(value, str) else ""
-        if not ADDRESS.fullmatch(address) or len(address) > 320:
-            raise SourceError("no_account", NO_ACCOUNT)
+        address = account_address(payload, field)
         if address not in addresses:
             addresses.append(address)
     return tuple(addresses)

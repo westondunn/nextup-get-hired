@@ -12,6 +12,7 @@ this module carry an exception type or one of this application's own failure cod
 nothing else.
 """
 
+import asyncio
 import hashlib
 import hmac
 import json
@@ -20,6 +21,7 @@ import re
 import secrets
 from contextlib import suppress
 from datetime import UTC, datetime
+from time import monotonic
 from typing import Annotated
 from urllib.parse import parse_qs
 
@@ -27,9 +29,10 @@ import httpx
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import JSONResponse, RedirectResponse, Response
 from redis.exceptions import RedisError
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
-from app import token_vault
+from app import google_lifecycle, token_vault
 from app.config import Settings, get_settings
 from app.db import get_session
 from app.google_connection import (
@@ -51,6 +54,7 @@ Database = Annotated[Session, Depends(get_session)]
 
 CALLBACK_PATH = "/api/google/callback"
 FLOW_SECONDS = 10 * 60
+CONSENT_PROVIDER_SECONDS = 10
 FLOW_KEY_PREFIX = "nextup:google:flow:"
 # One cookie per flow, named after a hash of its state, so two flows in one browser do not
 # overwrite each other.
@@ -128,8 +132,66 @@ def get_flow_store() -> FlowStore:
 Flows = Annotated[FlowStore, Depends(get_flow_store)]
 
 
+class _ConsentTransport(httpx.BaseTransport):
+    """One deadline across the callback's sync adapter calls, including streamed bodies."""
+
+    def __init__(self, client: httpx.AsyncClient) -> None:
+        self.client = client
+        self.runner = asyncio.Runner()
+        self.deadline = monotonic() + CONSENT_PROVIDER_SECONDS
+
+    def handle_request(self, request: httpx.Request) -> httpx.Response:
+        try:
+            return self.runner.run(self._send(request))
+        except TimeoutError:
+            raise httpx.ReadTimeout(
+                "Google consent exceeded its time limit.", request=request
+            ) from None
+
+    async def _send(self, request: httpx.Request) -> httpx.Response:
+        remaining = self.deadline - monotonic()
+        if remaining <= 0:
+            raise TimeoutError
+        async with asyncio.timeout(remaining):
+            response = await self.client.send(request, stream=True)
+            try:
+                # These callers need only the status on rejection or revocation.
+                if response.status_code != 200 or request.url == google_oauth.REVOCATION_URL:
+                    return httpx.Response(response.status_code)
+                if response.headers.get("content-encoding", "identity").lower() != "identity":
+                    raise SourceError("invalid_response", "Google returned an unexpected encoding.")
+                limit = (
+                    google_oauth.MAX_RESPONSE_BYTES
+                    if request.url == google_oauth.TOKEN_URL
+                    else gmail.MAX_RESPONSE_BYTES
+                )
+                content = bytearray()
+                async for part in response.aiter_bytes(chunk_size=8192):
+                    if len(content) + len(part) > limit:
+                        raise SourceError(
+                            "invalid_response", "Google response exceeded its size limit."
+                        )
+                    content.extend(part)
+                return httpx.Response(response.status_code, content=bytes(content))
+            finally:
+                await response.aclose()
+
+    def close(self) -> None:
+        with self.runner:
+            self.runner.run(self.client.aclose())
+
+
+def _async_http_client() -> httpx.AsyncClient:
+    return httpx.AsyncClient(follow_redirects=False, trust_env=False)
+
+
 def _http_client() -> httpx.Client:
-    return httpx.Client(timeout=10, follow_redirects=False, trust_env=False)
+    return httpx.Client(
+        transport=_ConsentTransport(_async_http_client()),
+        headers={"Accept-Encoding": "identity"},
+        follow_redirects=False,
+        trust_env=False,
+    )
 
 
 async def _requested_capabilities(request: Request) -> tuple[str, ...]:
@@ -185,7 +247,8 @@ def start_connection(
     if not all(_capability_enabled(settings, name) for name in capabilities):
         raise HTTPException(409, CAPABILITY_OFF)
     redirect_address = _redirect_address(request)
-    row = session.get(GoogleConnection, 1)
+    lifecycle = google_lifecycle.lifecycle_row(session, lock=True)
+    row = session.get(GoogleConnection, 1, populate_existing=True)
     if row is None:
         raise HTTPException(409, NO_CLIENT)
     try:
@@ -194,6 +257,9 @@ def start_connection(
         )
     except token_vault.VaultError:
         raise HTTPException(409, CLIENT_UNREADABLE) from None
+    client_id = row.client_id
+    epoch = str(lifecycle.epoch)
+    session.rollback()  # Release the local fence before contacting Redis.
     state = secrets.token_urlsafe(32)
     verifier = secrets.token_urlsafe(64)
     binding = secrets.token_urlsafe(32)
@@ -205,14 +271,15 @@ def start_connection(
                 "redirect_address": redirect_address,
                 "capabilities": list(capabilities),
                 "binding": _digest(binding),
-                "client_id": row.client_id,
+                "client_id": client_id,
+                "epoch": epoch,
             },
         )
     except RedisError:
         raise HTTPException(503, STORE_UNAVAILABLE) from None
     response = RedirectResponse(
         google_oauth.authorization_url(
-            client_id=row.client_id,
+            client_id=client_id,
             redirect_uri=redirect_address,
             capabilities=capabilities,
             state=state,
@@ -260,8 +327,13 @@ def _store(
     """
     # Every change to the connection takes this row lock (decision 0003, section 7). The
     # row is read again from the database, whatever this session loaded before.
+    lifecycle = google_lifecycle.lifecycle_row(session, lock=True)
     row = session.get(GoogleConnection, 1, with_for_update=True, populate_existing=True)
-    if row is None or row.client_id != entry["client_id"]:
+    if (
+        row is None
+        or row.client_id != entry["client_id"]
+        or str(lifecycle.epoch) != entry.get("epoch")
+    ):
         # The client was replaced while the user was at Google. The grant belongs to the
         # earlier client and is discarded.
         session.rollback()
@@ -274,7 +346,9 @@ def _store(
         # alone for the same reason.
         if known not in addresses:
             replaced_other = True
-            if known:
+            # Configuration credentials may share the old grant. Their ownership is
+            # not established here, so leave any remote revocation to the user.
+            if known and not gmail.credentials_present(settings):
                 try:
                     earlier = token_vault.open_sealed(
                         row.refresh_token_sealed, purpose=REFRESH_TOKEN_PURPOSE, settings=settings
@@ -291,6 +365,7 @@ def _store(
     row.account_address = addresses[0]
     row.connected_at = now
     row.updated_at = now
+    google_lifecycle.advance_generation(lifecycle)
     session.commit()
     return True, replaced_other, earlier
 
@@ -311,8 +386,13 @@ def _complete(request: Request, session: Session, settings: Settings, entry: dic
     code = _single(request, "code")
     if code is None or not CODE.fullmatch(code):
         return "failed"
-    row = session.get(GoogleConnection, 1)
-    if row is None or row.client_id != entry["client_id"]:
+    lifecycle = google_lifecycle.lifecycle_row(session)
+    row = session.get(GoogleConnection, 1, populate_existing=True)
+    if (
+        row is None
+        or row.client_id != entry["client_id"]
+        or str(lifecycle.epoch) != entry.get("epoch")
+    ):
         return "failed"
     client_id = row.client_id
     # Whether NextUp holds a grant that a revocation at Google could end.
@@ -364,6 +444,19 @@ def _finish(request: Request, session: Session, flows: FlowStore, settings: Sett
     state = _single(request, "state")
     if state is None or not STATE.fullmatch(state):
         raise HTTPException(400, FLOW_REFUSED)
+    # Acquire before spending state so a temporarily busy callback can be retried.
+    try:
+        with google_lifecycle.action(session):
+            return _finish_held(request, session, flows, settings, state)
+    except google_lifecycle.LifecycleBusy:
+        raise HTTPException(409, google_lifecycle.BUSY_MESSAGE) from None
+    except SQLAlchemyError:
+        raise HTTPException(503, STORE_UNAVAILABLE) from None
+
+
+def _finish_held(
+    request: Request, session: Session, flows: FlowStore, settings: Settings, state: str
+) -> Response:
     try:
         entry = flows.take(state)
     except RedisError:

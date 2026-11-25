@@ -43,9 +43,10 @@ TABLES = (
     "job_ratings",
     "email_classifications",
     "google_connections",
+    "google_lifecycle",
 )
-# Tables the rehearsal writes to itself; these must carry rows to count as exercised.
-EXERCISED = TABLES[:13]
+# The rehearsal writes the first group. The guarded migration seeds the lifecycle singleton.
+EXERCISED = (*TABLES[:13], "google_lifecycle")
 
 
 def normalize_schema(definition):

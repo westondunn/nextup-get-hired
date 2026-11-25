@@ -1,8 +1,9 @@
 """Which Google credentials a sync uses, and the token step. No database, no network."""
 
 from contextlib import contextmanager
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, call
 from urllib.parse import parse_qs
+from uuid import UUID, uuid4
 
 import httpx
 import pytest
@@ -27,7 +28,7 @@ from app.google_credentials import (
     usable,
 )
 from app.main import app
-from app.models import CorrespondenceSyncSettings, GoogleConnection
+from app.models import CorrespondenceSyncSettings, GoogleConnection, GoogleLifecycle
 from app.sources import gmail, google_calendar
 from app.sources.common import SourceError
 
@@ -79,9 +80,14 @@ def client_only():
     return connection(refresh_token_sealed=None, state="not_connected", granted_scopes=[])
 
 
+def lifecycle():
+    return GoogleLifecycle(id=1, epoch=UUID(int=1), generation=UUID(int=2), sync_paused=False)
+
+
 def session_with(row):
     session = MagicMock()
-    session.get.return_value = row
+    rows = {GoogleConnection: row, GoogleLifecycle: lifecycle()}
+    session.get.side_effect = lambda model, *args, **kwargs: rows[model]
     return session
 
 
@@ -217,7 +223,10 @@ def test_usable_says_whether_a_sync_would_have_credentials():
 def test_reading_the_connection_takes_no_lock():
     session = session_with(connection())
     resolve(session, STORED_ONLY, "gmail")
-    session.get.assert_called_once_with(GoogleConnection, 1)
+    assert session.get.call_args_list == [
+        call(GoogleLifecycle, 1, with_for_update=False, populate_existing=True),
+        call(GoogleConnection, 1, populate_existing=True),
+    ]
     assert not session.commit.called and not session.add.called
 
 
@@ -246,6 +255,7 @@ class ShortSession:
 
     def __init__(self, row):
         self.row = row
+        self.lifecycle = lifecycle()
         self.events = []
 
     def __enter__(self):
@@ -261,6 +271,10 @@ class ShortSession:
         self.events.append("commit")
 
     def get(self, model, key, **kwargs):
+        if model is GoogleLifecycle:
+            assert key == 1 and kwargs["with_for_update"] is True
+            self.events.append("lifecycle_lock")
+            return self.lifecycle
         assert (model, key) == (GoogleConnection, 1)
         self.events.append(kwargs)
         return self.row
@@ -315,7 +329,6 @@ def test_a_token_without_the_capability_scope_is_refused(capability, scope, shor
 @pytest.mark.parametrize(
     "response,code",
     [
-        (httpx.Response(400, json={"error": "invalid_grant"}), "provider_rejected"),
         (httpx.Response(401), "unauthorized"),
         (httpx.Response(503), "provider_unavailable"),
         (httpx.Response(200, json={"scope": BOTH_SCOPES}), "unauthorized"),
@@ -345,6 +358,7 @@ def test_a_newly_issued_refresh_token_replaces_the_stored_one_under_the_row_lock
     assert token == "synthetic-access"
     assert short.events == [
         "begin",
+        "lifecycle_lock",
         {"with_for_update": True, "populate_existing": True},
         "commit",
         "closed",
@@ -518,7 +532,9 @@ def test_a_switched_off_sync_is_reported_as_before_and_reads_no_connection():
     config = mail_config()
     session = fake_session(config, connection=connection())
     assert sync_gmail(session, Settings(token_key=SecretStr(KEY)))["status"] == "not_configured"
-    assert [call.args[0] for call in session.get.call_args_list] == [CorrespondenceSyncSettings]
+    read_models = {call.args[0] for call in session.get.call_args_list}
+    assert CorrespondenceSyncSettings in read_models
+    assert GoogleConnection not in read_models
 
 
 # ---------- turning sync on in Settings ----------
@@ -527,7 +543,7 @@ def test_a_switched_off_sync_is_reported_as_before_and_reads_no_connection():
 @pytest.fixture
 def settings_api(local_session, monkeypatch):
     database = MagicMock()
-    rows = {CorrespondenceSyncSettings: None, GoogleConnection: None}
+    rows = {CorrespondenceSyncSettings: None, GoogleConnection: None, GoogleLifecycle: lifecycle()}
     database.get.side_effect = lambda model, *args, **kwargs: rows[model]
     database.scalar.return_value = 0
     current = {"settings": STORED_ONLY}
@@ -624,3 +640,75 @@ def test_a_stored_connection_allows_only_the_capabilities_it_grants(
         saved = response.json()
         assert saved["enabled"] is body["enabled"]
         assert saved["calendar_enabled"] is body.get("calendar_enabled", False)
+
+
+@pytest.mark.parametrize("stale", ["none", "token", "generation", "epoch"])
+def test_invalid_grant_marks_only_the_exact_current_stored_grant(short, stale):
+    credentials = stored_credentials(short.row)
+    if stale == "token":
+        short.row.refresh_token_sealed = seal("synthetic-replacement", REFRESH_TOKEN_PURPOSE)
+    elif stale == "generation":
+        short.lifecycle.generation = uuid4()
+    elif stale == "epoch":
+        short.lifecycle.epoch = uuid4()
+        short.row.client_secret_sealed = seal("new-synthetic-client-secret", CLIENT_SECRET_PURPOSE)
+    tokens = Tokens(httpx.Response(400, json={"error": "invalid_grant"}))
+    with tokens.client() as client, pytest.raises(SourceError) as caught:
+        access_token(client, MagicMock(), STORED_ONLY, credentials, "gmail")
+    assert len(tokens.requests) == 1
+    if stale == "none":
+        assert short.row.state == "needs_reauthorization"
+        assert caught.value.code == "needs_reauthorization"
+    else:
+        assert short.row.state == "connected"
+        assert caught.value.code == "provider_rejected"
+
+
+def test_invalid_grant_due_to_explicit_admin_policy_keeps_the_grant(short):
+    credentials = stored_credentials(short.row)
+    tokens = Tokens(
+        httpx.Response(
+            400,
+            json={
+                "error": "invalid_grant",
+                "error_subtype": "admin_policy_enforced",
+            },
+        )
+    )
+    with tokens.client() as client, pytest.raises(SourceError) as caught:
+        access_token(client, MagicMock(), STORED_ONLY, credentials, "gmail")
+    assert caught.value.code == "admin_restricted"
+    assert short.row.state == "connected" and short.events == []
+
+
+def test_resaving_the_same_client_secret_preserves_a_rotation_of_the_current_grant(short):
+    credentials = stored_credentials(short.row)
+    short.lifecycle.epoch = uuid4()
+    short.row.client_secret_sealed = seal("new-synthetic-client-secret", CLIENT_SECRET_PURPOSE)
+    tokens = Tokens(refresh_token=ISSUED)
+    with tokens.client() as client:
+        assert access_token(client, MagicMock(), STORED_ONLY, credentials, "gmail")
+    assert opened(short.row) == ISSUED and short.row.state == "connected"
+
+
+@pytest.mark.parametrize("refusal_first", [True, False])
+def test_concurrent_refreshes_keep_the_rotated_token_in_both_response_orders(short, refusal_first):
+    # Both workers already resolved the same original grant before either response arrived.
+    successful = stored_credentials(short.row)
+    refused = stored_credentials(short.row)
+    rotation = Tokens(refresh_token=ISSUED)
+    rejection = Tokens(httpx.Response(400, json={"error": "invalid_grant"}))
+    for reject in (refusal_first, not refusal_first):
+        if reject:
+            with rejection.client() as client, pytest.raises(SourceError) as caught:
+                access_token(client, MagicMock(), STORED_ONLY, refused, "gmail")
+            if refusal_first:
+                assert caught.value.code == "needs_reauthorization"
+                assert short.row.state == "needs_reauthorization"
+            else:
+                assert caught.value.code == "provider_rejected"
+        else:
+            with rotation.client() as client:
+                assert access_token(client, MagicMock(), STORED_ONLY, successful, "gmail")
+    assert opened(short.row) == ISSUED
+    assert short.row.state == "connected"

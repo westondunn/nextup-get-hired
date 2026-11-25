@@ -131,9 +131,26 @@ One connection, in a new table added by a new migration revision through the gua
 
 ### 8. Disconnect
 
-Disconnect sends the refresh token to Google's revocation endpoint and then deletes the stored credentials. The credentials are deleted even if the revocation request fails; the user is told that access may still be listed in their Google Account and can be removed there.
+**Amendment accepted November 24, 2026.** Disconnect deletes the saved OAuth client and grant, invalidates pending consent and pauses both syncs in one local transaction. Only after that commit may NextUp try to revoke the grant at Google. Imported messages, events, links and user edits survive. Reconnecting uses the existing consent flow. After disconnect, enabling eligible sync requires an explicit change to sync settings. A new grant starts with a bounded rescan. If an older import has the same provider ID and its mailbox cannot be verified, NextUp preserves that row. The lifecycle stores a cutoff for automatic updates to imports, separate from the grant and its per-capability success times.
 
-Imported messages, events, links and user edits are kept. Sync for both capabilities stops.
+Disconnect makes at most one remote attempt within five seconds. It skips that attempt when the installation disallows live access, the saved token cannot be opened, or a separately configured credential may share the grant. Only a confirmed provider response counts as revocation. A refusal, timeout or interrupted request can leave access listed at Google. The user can check or remove the grant under third-party connections in their Google Account. Removing a shared grant there can affect other credentials.
+
+#### Lifecycle API and troubleshooting
+
+In every shipped configuration both Google capabilities are switched off. The guarded enablement path and clean-machine setup are tracked in [#14](https://github.com/westondunn/nextup-get-hired/issues/14). In an eligible configuration, unlock the local session, save the registered client in Settings and start consent with the required read-only capabilities. The Settings controls for testing and disconnecting are tracked in [#12](https://github.com/westondunn/nextup-get-hired/issues/12). The backend contract is:
+
+| Local endpoint | Result |
+| --- | --- |
+| `GET /api/google/connection` or a successful `PUT /api/google/client` | The existing state, local client ID and account address, enabled and granted capabilities, plus `credential_source` and per-capability `sync`. Reading status uses only local data. |
+| `POST /api/google/connection/test` | One refresh of the saved grant and a read-only probe for each enabled, granted capability. Returns `result: complete`, fixed codes in `capabilities.gmail` and `capabilities.calendar`, and the updated `connection`. Each probe can retry one temporary failure within the shared ten-second provider budget. Testing imports nothing and leaves sync timestamps alone. |
+| `POST /api/google/connect` | Starts the same single-use browser consent flow for connecting or reauthorizing. A failed reconnect preserves the preceding grant. |
+| `DELETE /api/google/connection` | Returns `disconnected` or `already_disconnected`, `revocation` (`confirmed`, `unconfirmed` or `not_applicable`), and the resulting `connection`. A repeat cannot confirm a prior attempt. A credential supplied only through configuration must be managed outside NextUp. Local cleanup is available even when Google access is disabled. |
+
+A saved grant has source `stored` even when unreadable. A complete configuration fallback has source `configured` when no grant is saved. Otherwise the source is `none`. Each `sync.gmail` and `sync.calendar` reports `active`, `last_attempt_at`, `last_status`, `last_success_at` and `freshness`. An attributable, committed, complete pass can advance last success even when it imports zero records. Partial work, a failed attempt or a probe cannot advance it. Old grants and unverified fallback identities supply no freshness evidence. Freshness is `inactive` when sync is off, `unknown` before an attributable success, and `stale` when the last success is older than twice the configured interval. Otherwise it is `current`.
+
+The test action reports one of `ok`, `disabled`, `not_granted`, `wrong_scope`, `needs_reauthorization`, `admin_restricted`, `temporarily_unavailable` or `provider_rejected` for each capability. A sync attempt uses `not_run`, `ok`, `disabled`, `not_configured`, `needs_reauthorization`, `wrong_scope`, `admin_restricted`, `temporarily_unavailable`, `unreadable`, `connection_error` or `provider_rejected`. Timestamps are nullable UTC values. Test and disconnect use an empty request body. An action refusal carries `detail.code` and a fixed `detail.message`. Local-session refusal keeps its existing HTTP 401 response. An unavailable action returns HTTP 409 and a local store failure returns HTTP 503.
+
+Use fresh consent for a definite `needs_reauthorization` result. For `wrong_scope`, request the missing read-only capability. For `admin_restricted`, the account administrator controls access. On `temporarily_unavailable`, retry later. A `busy` action is safe to retry after the current action finishes. An unreadable local grant can still be disconnected. The two action routes return fixed reasons and exclude provider response bodies and credentials.
 
 ### 9. Configuration
 
@@ -141,8 +158,8 @@ Imported messages, events, links and user edits are kept. Sync for both capabili
 
 - Legacy unprefixed names are refused.
 - The two sync flags remain the outer switch for the installation and default to off. The connection routes refuse with a fixed message when the flag for a requested capability is off.
-- Staging refuses integrations and their credentials (`NXG-C09`). The connection routes refuse in staging.
-- In fixture data mode every live provider path refuses, the connection routes included. They call `require_live_requests` first.
+- Staging refuses integrations and their credentials (`NXG-C09`). Status and local cleanup remain available.
+- In fixture data mode every live provider path refuses through `require_live_requests`. Status and local cleanup make no provider call.
 - The three Google configuration secrets are still read. Together they are the fallback path.
 
 **Needs a reviewed change, each with tests, in the issue that implements it:**
@@ -173,11 +190,11 @@ Every row leaves the application usable without Google, and none changes an impo
 | An administrator has restricted the service | Reported as needing attention, with a fixed message |
 | The key file is missing or the record cannot be decrypted | The connection is reported as unreadable. Sync does nothing. The rest of the application is unaffected |
 | Two connect flows run at once | Each `state` works once. The flow that completes last is the stored connection |
-| The user connects a different Google account | The earlier grant is revoked first, then replaced. Records imported from the earlier account stay |
+| The user connects a different Google account | The new grant is stored first. NextUp may then revoke the previous grant if its account is known and it is safe to do so. Imported records stay |
 
 **Implementation notes, 2026-11-15 ([#10](https://github.com/westondunn/nextup-get-hired/issues/10)).** Two implementation choices narrowed the original wording. Google's revocation ends an account's whole grant to a client, so a revocation at the wrong moment can end a grant NextUp is using.
 
-- **A different account.** The new grant is stored first, and the earlier grant is revoked immediately afterwards. If storing fails, nothing has been revoked and the earlier connection still works. The row lock is not held while Google is contacted. When the same account connects again, nothing is revoked.
+- **A different account.** The new grant is stored first. NextUp then attempts revocation of the earlier grant only if its account is known, differs from the replacement and no complete configuration fallback may share it. If storing fails, nothing has been revoked and the earlier connection still works. The row lock is not held while Google is contacted. When the same account connects again, nothing is revoked.
 - **None of the capabilities asked for is granted.** Nothing is stored, as written. The returned token is discarded. NextUp attempts revocation only if it holds neither a stored grant nor a complete configuration fallback. Revoking shared access could invalidate the earlier connection. The maintainer confirmed this wording for #10 on 2026-11-23.
 
 ## Google connect evidence

@@ -10,18 +10,22 @@ Nothing here logs or returns a client secret, and no error repeats what was subm
 
 import json
 import re
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Annotated
+from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, Request
+from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
-from app import token_vault
+from app import google_lifecycle, token_vault
 from app.config import Settings, get_settings
 from app.db import get_session
 from app.local_session import require_session
-from app.models import GoogleConnection
+from app.models import CorrespondenceSyncSettings, GoogleConnection, GoogleLifecycle
+from app.sources import gmail
 from app.sources.common import SourceError, require_live_requests
 from app.sources.google_oauth import capabilities_of
 
@@ -100,26 +104,122 @@ def _state(row: GoogleConnection | None, settings: Settings) -> str:
     return row.state
 
 
-def _out(row: GoogleConnection | None, settings: Settings) -> dict:
+# Keep provider and adapter details out of the lifecycle report. The correspondence API
+# continues to return its own result codes.
+ATTEMPT_STATUS = {
+    "ok": "ok",
+    "disabled": "disabled",
+    "fixture_mode": "disabled",
+    "not_configured": "not_configured",
+    "not_connected": "not_configured",
+    "needs_reauthorization": "needs_reauthorization",
+    "invalid_grant": "needs_reauthorization",
+    "capability_not_granted": "wrong_scope",
+    "wrong_scope": "wrong_scope",
+    "admin_restricted": "admin_restricted",
+    "admin_policy_rejected": "admin_restricted",
+    "network_error": "temporarily_unavailable",
+    "provider_unavailable": "temporarily_unavailable",
+    "temporarily_unavailable": "temporarily_unavailable",
+    "connection_unreadable": "unreadable",
+    "connection_not_updated": "connection_error",
+    "not_run": "not_run",
+}
+
+
+def _sync_status(
+    name: str,
+    config: CorrespondenceSyncSettings | None,
+    lifecycle: GoogleLifecycle,
+    *,
+    eligible: bool,
+    stored: bool,
+    interval: int,
+    now: datetime,
+) -> dict:
+    prefix = "" if name == "gmail" else "calendar_"
+    active = bool(
+        eligible and not lifecycle.sync_paused and config and getattr(config, prefix + "enabled")
+    )
+    success = None
+    attempt = None
+    status = "not_run"
+    if stored and lifecycle.generation is not None:
+        success = getattr(lifecycle, name + "_last_success_at")
+        if config and getattr(lifecycle, name + "_attempt_generation") == lifecycle.generation:
+            attempt = getattr(config, prefix + "last_run_at")
+            if attempt is not None:
+                status = ATTEMPT_STATUS.get(
+                    getattr(config, prefix + "last_status"), "provider_rejected"
+                )
+    freshness = "inactive"
+    if active:
+        if success is None:
+            freshness = "unknown"
+        elif now - success > timedelta(seconds=2 * interval):
+            freshness = "stale"
+        else:
+            freshness = "current"
+    return {
+        "active": active,
+        "last_attempt_at": attempt,
+        "last_status": status,
+        "last_success_at": success,
+        "freshness": freshness,
+    }
+
+
+def connection_status(session: Session, settings: Settings) -> dict:
+    # One snapshot keeps the account, its grant and its sync evidence together even if a
+    # disconnect or reauthorization commits while the status request is running.
+    lifecycle, row, config = session.execute(
+        select(GoogleLifecycle, GoogleConnection, CorrespondenceSyncSettings)
+        .select_from(GoogleLifecycle)
+        .outerjoin(GoogleConnection, GoogleConnection.id == GoogleLifecycle.id)
+        .outerjoin(CorrespondenceSyncSettings, CorrespondenceSyncSettings.id == GoogleLifecycle.id)
+        .where(GoogleLifecycle.id == 1)
+        .execution_options(populate_existing=True)
+    ).one()
     reason = unavailable_reason(settings)
+    stored = row is not None and row.refresh_token_sealed is not None
+    source = "none"
+    if stored:
+        source = "stored"
+    elif gmail.credentials_present(settings):
+        source = "configured"
+    state = _state(row, settings)
+    granted = list(capabilities_of(row.granted_scopes or [])) if row else []
+    enabled = [name for name in ("gmail", "calendar") if getattr(settings, name + "_sync_enabled")]
+    now = datetime.now(UTC)
     return {
         "available": reason is None,
         "unavailable_reason": reason,
         "client_configured": row is not None,
         "client_id": row.client_id if row is not None else None,
-        "state": _state(row, settings),
-        # What this installation's configuration allows to be connected and used.
-        "enabled_capabilities": [
-            name
-            for name, enabled in (
-                ("gmail", settings.gmail_sync_enabled),
-                ("calendar", settings.calendar_sync_enabled),
-            )
-            if enabled
-        ],
-        # What Google granted, whatever was asked for and whatever NextUp is set to use.
-        "granted_capabilities": list(capabilities_of(row.granted_scopes or [])) if row else [],
+        "state": state,
+        "enabled_capabilities": enabled,
+        "granted_capabilities": granted,
         "account_address": row.account_address if row is not None else None,
+        "credential_source": source,
+        "sync": {
+            name: _sync_status(
+                name,
+                config,
+                lifecycle,
+                eligible=(
+                    not settings.fixture_data_mode
+                    and name in enabled
+                    and (
+                        source == "configured"
+                        or (stored and state == "connected" and name in granted)
+                    )
+                ),
+                stored=stored,
+                interval=getattr(settings, name + "_sync_interval_seconds"),
+                now=now,
+            )
+            for name in ("gmail", "calendar")
+        },
     }
 
 
@@ -154,14 +254,35 @@ SubmittedClient = Annotated[tuple[str, str], Depends(_submitted_client)]
 # Every connection route needs a local session (docs/decisions/0001-local-session-boundary.md).
 @router.get("/connection", dependencies=[Depends(require_session)])
 def read_connection(session: Database):
-    return _out(session.get(GoogleConnection, 1), get_settings())
+    try:
+        return connection_status(session, get_settings())
+    except SQLAlchemyError:
+        raise HTTPException(
+            503, {"code": "connection_error", "message": "The Google connection could not be read."}
+        ) from None
 
 
 @router.put("/client", dependencies=[Depends(require_session)])
 def save_client(client: SubmittedClient, session: Database):
     settings = get_settings()
     require_available(settings)
-    client_id, client_secret = client
+    try:
+        with google_lifecycle.action(session):
+            return _save_client(session, settings, *client)
+    except google_lifecycle.LifecycleBusy:
+        raise HTTPException(
+            409, {"code": "busy", "message": google_lifecycle.BUSY_MESSAGE}
+        ) from None
+    except SQLAlchemyError:
+        session.rollback()
+        raise HTTPException(
+            503,
+            {"code": "connection_error", "message": "The Google connection could not be saved."},
+        ) from None
+
+
+def _save_client(session: Session, settings: Settings, client_id: str, client_secret: str) -> dict:
+    lifecycle = google_lifecycle.lifecycle_row(session, lock=True)
     sealed = token_vault.seal(client_secret, purpose=CLIENT_SECRET_PURPOSE, settings=settings)
     session.execute(
         insert(GoogleConnection)
@@ -174,9 +295,11 @@ def save_client(client: SubmittedClient, session: Database):
         # A refresh token belongs to the client it was issued to.
         session.rollback()
         raise HTTPException(409, CLIENT_IN_USE)
+    # Every save installs a fresh sealed client secret, invalidating pending consent.
+    lifecycle.epoch = uuid4()
     row.client_id = client_id
     row.client_secret_sealed = sealed
     row.key_version = KEY_VERSION
     row.updated_at = datetime.now(UTC)
     session.commit()
-    return _out(row, settings)
+    return connection_status(session, settings)
