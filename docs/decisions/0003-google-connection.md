@@ -137,7 +137,7 @@ Disconnect makes at most one remote attempt within five seconds. It skips that a
 
 #### Lifecycle API and troubleshooting
 
-In every shipped configuration both Google capabilities are switched off. The guarded enablement path and clean-machine setup are tracked in [#14](https://github.com/westondunn/nextup-get-hired/issues/14). In an eligible configuration, unlock the local session, save the registered client in Settings and start consent with the required read-only capabilities. The Settings controls for testing and disconnecting are tracked in [#12](https://github.com/westondunn/nextup-get-hired/issues/12). The backend contract is:
+In every shipped configuration both Google capabilities are switched off. The guarded enablement path and clean-machine setup are tracked in [#14](https://github.com/westondunn/nextup-get-hired/issues/14). In an eligible configuration, unlock the local session, save the registered client in Settings and start consent with the required read-only capabilities. The [Settings walkthrough](../DEVELOPMENT.md#google-connection-in-settings) describes testing, reauthorization, disconnect and recovery. The backend contract is:
 
 | Local endpoint | Result |
 | --- | --- |

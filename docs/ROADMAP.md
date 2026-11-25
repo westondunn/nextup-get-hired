@@ -12,7 +12,7 @@ Branch names below are suggestions that follow the [branching guide](BRANCHING.m
 
 ## What exists today
 
-- Read-only Gmail and Google Calendar sync are implemented and switched off in every shipped configuration. A consent flow that stores an encrypted grant exists in the API and has been tested with simulated Google responses only ([#10](https://github.com/westondunn/nextup-get-hired/issues/10), in progress). Sync uses the stored grant when one exists. Settings has a card that saves the Google client and starts the flow; in every shipped configuration it reports that no Google account can be connected. There is no supported way to enable any of it.
+- Read-only Gmail and Google Calendar sync are implemented and switched off in every shipped configuration. The [connect flow](https://github.com/westondunn/nextup-get-hired/issues/10) and [lifecycle backend](https://github.com/westondunn/nextup-get-hired/issues/11#issuecomment-7152672930) are implemented and tested with simulated Google responses. Settings reports installation availability, per-capability grant and sync state, and the outcome of connection actions. There is no supported way to enable any of it.
 - Job-listing fetching from Adzuna and from Greenhouse, Lever and Ashby boards is implemented and switched off in every shipped configuration, with no supported way to enable it.
 - The API has no authentication and is published on the loopback interface only. It refuses requests to a non-local host name and cross-origin state-changing requests. Changing or running mail and calendar sync requires a local session, and so do the Google client and connection routes, except the address Google sends the browser back to. No other route does.
 - The optional external classifier interface is described in [CORRESPONDENCE_SYNC.md](CORRESPONDENCE_SYNC.md) and is refused in every environment.
@@ -97,23 +97,23 @@ This remains the first connection to be completed and validated. It is not suppo
   - Complete when: the flow, its refusal paths and the migration round trip pass with mocked provider calls
   - Implementation evidence: [#51](https://github.com/westondunn/nextup-get-hired/pull/51) and [#52](https://github.com/westondunn/nextup-get-hired/pull/52) added encryption and the connection table. [#53](https://github.com/westondunn/nextup-get-hired/pull/53) and [#54](https://github.com/westondunn/nextup-get-hired/pull/54) added client saving, consent and callback. [#55](https://github.com/westondunn/nextup-get-hired/pull/55) connected sync to the stored grant, and [#56](https://github.com/westondunn/nextup-get-hired/pull/56) added the Settings card that starts consent. [Hosted CI passed at `4589435`](https://github.com/westondunn/nextup-get-hired/actions/runs/43777493105) with simulated Google responses. The [2026-11-23 acceptance review](decisions/0003-google-connection.md#google-connect-evidence) links the tests for each criterion, the maintainer's refusal-handling decision and the hosted verification at `0fd9646`. Every shipped configuration keeps the connection disabled.
 
-- [ ] **Outcome: a user can check, renew and remove a Google connection**
+- [x] **Outcome: a user can check, renew and remove a Google connection**
   - Tracking: [#11](https://github.com/westondunn/nextup-get-hired/issues/11)
   - Priority and dependencies: P1. The [Google connect prerequisite](https://github.com/westondunn/nextup-get-hired/issues/10#issuecomment-7147578227) is complete.
   - Suggested branch: `feature/11-google-connection-lifecycle`
   - Contributor notes: `backend/app/correspondence.py`, `backend/app/correspondence_tasks.py`
   - Contribution availability: maintainer-only
   - Complete when: every connection state, including revoked and unreachable, is tested
-  - Backend implementation and synthetic verification: [PR #78](https://github.com/westondunn/nextup-get-hired/pull/78). The full Settings experience and clean-machine provider checks have separate gates.
+  - Backend implementation and synthetic verification: [PR #78](https://github.com/westondunn/nextup-get-hired/pull/78). The [main run](https://github.com/westondunn/nextup-get-hired/actions/runs/45544306412) passed and [#11 was completed](https://github.com/westondunn/nextup-get-hired/issues/11#issuecomment-7152672930). Settings and clean-machine provider checks have separate gates.
 
 - [ ] **Outcome: Settings shows the Google connection state and actions**
   - Tracking: [#12](https://github.com/westondunn/nextup-get-hired/issues/12)
-  - Priority and dependencies: P1; blocked by [#11](https://github.com/westondunn/nextup-get-hired/issues/11)
+  - Priority and dependencies: P1. The [backend lifecycle](https://github.com/westondunn/nextup-get-hired/issues/11#issuecomment-7152672930) is complete.
   - Suggested branch: `feature/12-google-connection-settings`
   - Contributor notes: `frontend/src/hub/SettingsView.tsx`; includes accessibility coverage
   - Contribution availability: maintainer-only
   - Complete when: each state has a tested rendering and the accessibility checks pass
-  - Evidence: the [Settings card delivered for #10](https://github.com/westondunn/nextup-get-hired/pull/56) shows Google as unavailable in shipped configurations. The lifecycle states, actions and accessibility checks for #12 depend on #11.
+  - Evidence: the [Settings card delivered for #10](https://github.com/westondunn/nextup-get-hired/pull/56) shows Google as unavailable in shipped configurations. The [Settings walkthrough](DEVELOPMENT.md#google-connection-in-settings) and [PR #79](https://github.com/westondunn/nextup-get-hired/pull/79) cover the lifecycle states and actions implemented against the merged #11 contract.
 
 - [x] **Outcome: calendar import and display are tested across daylight-saving boundaries**
   - Tracking: [#13](https://github.com/westondunn/nextup-get-hired/issues/13)
@@ -173,14 +173,14 @@ The core preview requires no enabled integration. The maintainer accepted the in
   - Complete when: the maintainer accepts the merged contract with the Gmail mapping and its gaps
   - Evidence: the proposal merged in [PR #65](https://github.com/westondunn/nextup-get-hired/pull/65) ([`759e53c`](https://github.com/westondunn/nextup-get-hired/commit/759e53cd3dfa930de53a2c74c307aa7bf1276cbd)). On 2026-11-23 the maintainer accepted the [contract](CORRESPONDENCE_CAPABILITY.md) with amendments covering mailbox identity and preservation of user decisions. The [Gmail mapping](CORRESPONDENCE_CAPABILITY.md#gmail-mapping) records gaps in the current implementation. Adapter conformance and provider-specific validation remain open.
 
-- [ ] **Outcome: a second, independent email adapter has been evaluated**
+- [x] **Outcome: a second, independent email adapter has been evaluated**
   - Tracking: [#25](https://github.com/westondunn/nextup-get-hired/issues/25)
   - Priority and dependencies: provisional. The maintainer completed [#24](https://github.com/westondunn/nextup-get-hired/issues/24#issuecomment-7118773304). The [accepted correspondence contract](CORRESPONDENCE_CAPABILITY.md) supplies the evaluation criteria.
   - Suggested branch: `docs/25-second-email-adapter-evaluation`
   - Contributor notes: bounded discovery; no provider or protocol chosen in advance; no implementation
   - Contribution availability: maintainer-only
   - Complete when: a written evaluation ends in one recommendation, or in a recommendation not to proceed
-  - Evidence: the [merged evaluation](https://github.com/westondunn/nextup-get-hired/pull/76) compares Microsoft Graph, OAuth-capable IMAP and JMAP and recommends deferring a second adapter. The maintainer decision belongs to [#25](https://github.com/westondunn/nextup-get-hired/issues/25).
+  - Evidence: the [merged evaluation](https://github.com/westondunn/nextup-get-hired/pull/76) compares Microsoft Graph, OAuth-capable IMAP and JMAP and recommends deferring a second adapter. The maintainer [accepted deferral and completed the evaluation](https://github.com/westondunn/nextup-get-hired/issues/25#issuecomment-7152825802).
 
 - [x] **Outcome: an optional AI task contract defines separate connectivity and quality checks**
   - Tracking: [#26](https://github.com/westondunn/nextup-get-hired/issues/26)

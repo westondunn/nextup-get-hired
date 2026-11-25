@@ -37,6 +37,8 @@ JMAP Session identifies accounts and capabilities. Within the selected account, 
 
 ## Decision
 
+On November 24, 2026 the maintainer accepted deferral and [closed the evaluation](https://github.com/westondunn/nextup-get-hired/issues/25#issuecomment-7152825802).
+
 For all three candidates, a prospective adapter would keep refresh tokens or revocable API tokens encrypted on the NextUp server with a separate restricted key. No NextUp credential was created or stored for this review. Exclude password-only configurations. During setup and sync, provider requests go only to that provider's identified authorization and mail services. Bounded message data flows to local records, with no mailbox writes or other processor. Reconnect must prove the same mailbox before reusing its namespace. Retain ambiguous legacy rows and leave ambiguous classifier hints unapplied. Preserve the user's edits, links and detection on retries, disconnect and provider changes. These are implementation requirements. This evaluation used public documents only and ran no protocol, live-account or conformance tests. [Contract][contract] · [Credential storage precedent][storage]
 
 **Defer implementation.** Revisit the decision when a named account and workflow meet the demand criterion, the narrowest usable grant and setup burden are documented for that target, and there is a plan to isolate its records and checkpoints from Gmail. The accepted contract already specifies a synthetic conformance suite for these cases. The shared implementation decomposition is still a draft. Any implementation issue requires separate maintainer approval. [Required tests][tests] · [Implementation decomposition][decomposition] · [Issue #25][issue]
