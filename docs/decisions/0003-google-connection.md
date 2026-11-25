@@ -162,15 +162,15 @@ Use fresh consent for a definite `needs_reauthorization` result. For `wrong_scop
 - In fixture data mode every live provider path refuses through `require_live_requests`. Status and local cleanup make no provider call.
 - The three Google configuration secrets are still read. Together they are the fallback path.
 
-**Needs a reviewed change, each with tests, in the issue that implements it:**
+**Configuration decisions and implementation status**
 
-| Rule today | Change | Safety rationale |
+| Original rule | Decision and status | Safety rationale |
 | --- | --- | --- |
-| `NXG-C08`: a sync flag that is on requires all three Google secrets in configuration | With a flag on, configuration must hold all three or none. One or two is still refused | The rule exists so that a half-configured integration cannot start. With stored credentials, "none" is valid: nothing is sent to Google until a connection exists, and sync reports that it is not connected |
-| The launcher accepts only `false` for the sync flags | A documented, explicit way to turn a flag on in the development environment | Without it the connection can be exercised only in tests. This is part of validating the setup ([#14](https://github.com/westondunn/nextup-get-hired/issues/14)); the shipped default stays off |
-| Enabling sync in Settings requires the flag and the three configuration secrets | It requires the flag and either a stored connection that grants the capability or the complete fallback | Same condition, moved to where the credential now lives |
+| `NXG-C08`: a sync flag that is on requires all three Google secrets in configuration | Implemented. With a flag on, configuration must hold all three or none. One or two is still refused | The rule exists so that a half-configured integration cannot start. With stored credentials, "none" is valid: nothing is sent to Google until a connection exists, and sync reports that it is not connected |
+| The launcher accepts only `false` for the sync flags | Pending. Provide a documented, explicit way to turn a flag on in the development environment | Without it the connection can be exercised only in tests. This is part of validating the setup ([#14](https://github.com/westondunn/nextup-get-hired/issues/14)); the shipped default stays off |
+| Enabling sync in Settings requires the flag and the three configuration secrets | Implemented. It requires the flag and either a usable stored grant for that capability or the complete fallback when there is no stored grant | Same condition, moved to where the credential now lives |
 
-**Fallback precedence.** A stored connection is always used when one exists. The configuration token is used only when there is no stored connection and all three secrets are present. Settings shows that state as configured outside NextUp: no consent record, no per-capability record and no disconnect.
+**Fallback precedence.** A stored connection is always used when one exists. The configuration token is used only when there is no stored connection and all three secrets are present. Settings identifies the fallback as configured outside NextUp. If a client was also saved locally without a grant, Disconnect removes that client and pauses sync. The configured credential is managed outside NextUp. A fallback alone offers no Disconnect action.
 
 ## Failure behavior
 

@@ -1,6 +1,6 @@
 # Second read-only email adapter evaluation
 
-**Recommendation for #25: defer implementation.** Microsoft Graph offers the clearest documented read-only grant for a body-bearing import. The public record does not identify a NextUp user who needs one of these specific mailbox configurations, and NextUp still lacks the mailbox identity and checkpoint handling needed to demonstrate safe coexistence with Gmail. This is a recommendation for maintainer review. [Issue #25][issue] · [Accepted correspondence contract][contract]
+**The maintainer accepted deferral of a second mail adapter in #25.** Microsoft Graph offers the clearest documented read-only grant for a body-bearing import. The public record does not identify a NextUp user who needs one of these specific mailbox configurations, and NextUp still lacks the mailbox identity and checkpoint handling needed to demonstrate safe coexistence with Gmail. [Issue #25][issue] · [Accepted correspondence contract][contract]
 
 The evaluation covers **Correspondence: read** at [`0fd9646`][baseline]. The implemented baseline is Gmail API with `gmail.readonly`, **Implemented, disabled** and support status **None**. Its worker still keys messages by source and provider ID without a mailbox namespace, and it can miss late arrivals or a listing continuation. The other-mailboxes matrix row is **Not implemented**, support status **None**. [Gmail mapping][mapping] · [Integration matrix][matrix]
 

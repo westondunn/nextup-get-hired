@@ -144,7 +144,7 @@ This remains the first connection to be completed and validated. It is not suppo
 
 - [ ] **Outcome: the Google setup is validated from a clean machine**
   - Tracking: [#14](https://github.com/westondunn/nextup-get-hired/issues/14)
-  - Priority and dependencies: P1. The [Google connect prerequisite](https://github.com/westondunn/nextup-get-hired/issues/10#issuecomment-7147578227) is complete., [#11](https://github.com/westondunn/nextup-get-hired/issues/11) and [#12](https://github.com/westondunn/nextup-get-hired/issues/12); a live-account test needs separate maintainer approval
+  - Priority and dependencies: P1. [Google connect](https://github.com/westondunn/nextup-get-hired/issues/10#issuecomment-7147578227) and the [lifecycle backend](https://github.com/westondunn/nextup-get-hired/issues/11#issuecomment-7152672930) are complete. Validation still requires [Settings](https://github.com/westondunn/nextup-get-hired/issues/12), guarded enablement and separate approval for a dedicated test account and clean machine.
   - Suggested branch: `docs/14-google-oauth-setup`
   - Contributor notes: setup guide under `docs/`, README status table
   - Contribution availability: maintainer-only
