@@ -1,4 +1,4 @@
-import { type FormEvent, useEffect, useId, useState } from 'react';
+import { type FormEvent, useEffect, useId, useRef, useState } from 'react';
 import { ApiError } from '../jobs-api';
 import { endSession, readSession, type SessionState, startSession } from './session-api';
 
@@ -14,7 +14,15 @@ function failure(error: unknown, fallback: string): string {
  * Lets the user unlock integration settings by entering the installation's setup code once.
  * The code lives only in the input while it is being typed and is cleared on every submit.
  */
-export function LocalSessionCard({ onChange }: { onChange?: (active: boolean) => void }) {
+export function LocalSessionCard({
+  sessionActive,
+  focusUnlock = false,
+  onChange,
+}: {
+  sessionActive?: boolean;
+  focusUnlock?: boolean;
+  onChange?: (active: boolean) => void;
+}) {
   const [state, setState] = useState<SessionState | null>(null);
   const [code, setCode] = useState('');
   const [busy, setBusy] = useState(false);
@@ -22,6 +30,7 @@ export function LocalSessionCard({ onChange }: { onChange?: (active: boolean) =>
   const titleId = useId();
   const inputId = useId();
   const helpId = useId();
+  const codeInput = useRef<HTMLInputElement>(null);
 
   function apply(next: SessionState) {
     setState(next);
@@ -73,20 +82,25 @@ export function LocalSessionCard({ onChange }: { onChange?: (active: boolean) =>
     }
   }
 
+  // A protected action can discover that the session expired while Settings was open.
+  const active = sessionActive ?? state?.active;
+  useEffect(() => {
+    if (focusUnlock && !active) codeInput.current?.focus();
+  }, [focusUnlock, active]);
   const status = !state
     ? error
       ? 'Lock status unknown.'
       : 'Checking the lock…'
     : !state.configured
       ? 'Locked. No setup code is configured for this installation.'
-      : state.active
+      : active
         ? 'Unlocked in this browser.'
         : 'Locked.';
 
   return (
     <section
       aria-labelledby={titleId}
-      className={`mb-3 rounded-lg border p-4 ${state?.active ? 'border-emerald-200 bg-emerald-50/30' : 'border-slate-200'}`}
+      className={`mb-3 rounded-lg border p-4 ${active ? 'border-emerald-200 bg-emerald-50/30' : 'border-slate-200'}`}
     >
       <h3 id={titleId} className="text-sm font-semibold text-slate-900">
         Integrations lock
@@ -101,13 +115,14 @@ export function LocalSessionCard({ onChange }: { onChange?: (active: boolean) =>
         {status}
       </p>
 
-      {state?.configured && !state.active && (
+      {state?.configured && !active && (
         <form onSubmit={unlock} className="mt-3 flex flex-wrap items-end gap-2">
           <div>
             <label htmlFor={inputId} className="block text-xs font-medium text-slate-600">
               Setup code
             </label>
             <input
+              ref={codeInput}
               id={inputId}
               type="password"
               autoComplete="off"
@@ -138,7 +153,7 @@ export function LocalSessionCard({ onChange }: { onChange?: (active: boolean) =>
         </p>
       )}
 
-      {state?.active && (
+      {active && (
         <button
           type="button"
           onClick={() => void lock()}

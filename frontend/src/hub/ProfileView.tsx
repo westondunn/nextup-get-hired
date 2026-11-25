@@ -98,8 +98,7 @@ export default function ProfileView() {
     <div>
       <h2 className="text-xl font-bold text-slate-900">Search Profile</h2>
       <p className="mt-1 text-sm text-slate-500">
-        Define your skills, target roles, and preferences. This profile stays on your device and
-        powers job scoring.
+        NextUp uses your skills, target roles, and preferences to score jobs on this device.
       </p>
 
       {loading && <p className="mt-4 text-sm text-slate-500">Loading…</p>}
