@@ -10,7 +10,10 @@ const api = vi.hoisted(() => ({
 
 // The shell polls the alert count; every other page is replaced by a marker so that this
 // test exercises navigation and the real Search Plan view only.
-vi.mock('./jobs-api', () => ({ request: api.request }));
+vi.mock(import('./jobs-api'), async (original) => ({
+  ...(await original()),
+  request: api.request,
+}));
 vi.mock('./hub/campaign-api', () => ({
   readCampaigns: api.readCampaigns,
   readTasks: api.readTasks,
@@ -30,7 +33,11 @@ vi.mock('./hub/ContentView', () => ({ default: () => <div>content page marker</d
 vi.mock('./hub/ContactsView', () => ({ default: () => <div>contacts page marker</div> }));
 vi.mock('./hub/MetricsView', () => ({ default: () => <div>metrics page marker</div> }));
 vi.mock('./hub/DiscoveryView', () => ({ default: () => <div>discovery page marker</div> }));
-vi.mock('./hub/SettingsView', () => ({ default: () => <div>settings page marker</div> }));
+vi.mock('./hub/SettingsView', () => ({
+  default: ({ googleResult }: { googleResult: string | null }) => (
+    <div data-google-result={googleResult}>settings page marker</div>
+  ),
+}));
 
 beforeEach(() => {
   window.scrollTo = vi.fn();
@@ -48,8 +55,14 @@ it('opens Settings when Google sends the browser back, and clears the address ba
   window.history.replaceState(null, '', '/?google=declined');
   render(<NextupHub />);
   expect(screen.getByRole('heading', { level: 1, name: 'Settings' })).toBeTruthy();
-  expect(screen.getByText('settings page marker')).toBeTruthy();
+  expect(screen.getByText('settings page marker')).toHaveAttribute(
+    'data-google-result',
+    'declined',
+  );
   expect(window.location.search).toBe('');
+  fireEvent.click(screen.getAllByRole('button', { name: 'Dashboard' })[0]);
+  fireEvent.click(screen.getAllByRole('button', { name: 'Settings' })[0]);
+  expect(screen.getByText('settings page marker')).not.toHaveAttribute('data-google-result');
 });
 
 it('ignores a result word it does not know, and still clears the address bar', () => {

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { type Diagnostic, type Health, readDiagnostic, readHealth, startDiagnostic } from '../api';
 import { cleanupHistory, previewHistory, type HistoryPreview } from '../retention-api';
 import {
@@ -44,6 +44,15 @@ export default function SettingsView({
 }) {
   // Whether the integrations lock is open in this browser.
   const [sessionActive, setSessionActive] = useState(false);
+  const [sessionExpired, setSessionExpired] = useState(false);
+  const expireSession = useCallback(() => {
+    setSessionActive(false);
+    setSessionExpired(true);
+  }, []);
+  const applySession = useCallback((active: boolean) => {
+    setSessionActive(active);
+    setSessionExpired(false);
+  }, []);
   // Health
   const [health, setHealth] = useState<Health | null>(null);
   const [healthError, setHealthError] = useState('');
@@ -97,6 +106,51 @@ export default function SettingsView({
   // General
   const [message, setMessage] = useState('');
 
+  const mailRequest = useRef(0);
+  const preferencesLoaded = useRef(false);
+  const syncTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const [syncRevision, setSyncRevision] = useState(0);
+
+  const refreshMail = useCallback(async (loadPreferences: boolean) => {
+    const revision = ++mailRequest.current;
+    try {
+      const next = await readCorrespondence();
+      if (revision !== mailRequest.current) return;
+      setMail(next);
+      setMailError('');
+      if (loadPreferences || !preferencesLoaded.current) {
+        preferencesLoaded.current = true;
+        setMailQuery(next.query);
+        setMailBatch(next.max_messages_per_run);
+        setCalLookahead(next.calendar_lookahead_days);
+      }
+    } catch {
+      if (revision === mailRequest.current) {
+        setMail(null);
+        setMailError('Mail and calendar sync settings could not be read.');
+      }
+    }
+  }, []);
+
+  useEffect(() => {
+    void refreshMail(true);
+    return () => {
+      ++mailRequest.current;
+      clearTimeout(syncTimer.current);
+    };
+  }, [refreshMail]);
+
+  const connectionChanged = useCallback(
+    (kind: 'save' | 'test' | 'disconnect') => {
+      // Disconnect pauses both syncs before we hear back. A test can change credential
+      // eligibility, but users may be editing a filter while the provider answers.
+      if (kind === 'disconnect') setMail(null);
+      setMailMsg('');
+      void refreshMail(false);
+    },
+    [refreshMail],
+  );
+
   useEffect(() => {
     // Health polling
     let active = true;
@@ -118,17 +172,6 @@ export default function SettingsView({
       if (active) timer = setTimeout(poll, 10000);
     }
     void poll();
-    readCorrespondence()
-      .then((m) => {
-        if (!active) return;
-        setMail(m);
-        setMailQuery(m.query);
-        setMailBatch(m.max_messages_per_run);
-        setCalLookahead(m.calendar_lookahead_days);
-      })
-      .catch(() => {
-        if (active) setMailError('Gmail sync status unavailable.');
-      });
     // Load profile
     readProfile()
       .then((p) => {
@@ -200,14 +243,14 @@ export default function SettingsView({
     calendar_enabled?: boolean;
     auto_create_applications?: boolean;
   }) {
-    const autoCreate = changes.auto_create_applications ?? mail?.auto_create_applications ?? false;
-    const enabled = changes.enabled ?? mail?.enabled ?? false;
-    const calendarEnabled = changes.calendar_enabled ?? mail?.calendar_enabled ?? false;
+    if (!sessionActive || !mail || mailBusy) return;
+    const autoCreate = changes.auto_create_applications ?? mail.auto_create_applications;
+    const enabled = changes.enabled ?? mail.enabled;
+    const calendarEnabled = changes.calendar_enabled ?? mail.calendar_enabled;
     const query = mailQuery.trim() || 'label:job-search';
     const batch = Math.min(200, Math.max(1, Math.round(mailBatch) || 25));
     const lookahead = Math.min(60, Math.max(1, Math.round(calLookahead) || 14));
     if (
-      mail &&
       enabled === mail.enabled &&
       calendarEnabled === mail.calendar_enabled &&
       autoCreate === mail.auto_create_applications &&
@@ -217,6 +260,7 @@ export default function SettingsView({
     ) {
       return;
     }
+    const revision = ++mailRequest.current;
     setMailBusy(true);
     setMailError('');
     try {
@@ -228,6 +272,11 @@ export default function SettingsView({
         calendar_lookahead_days: lookahead,
         auto_create_applications: autoCreate,
       });
+      setSyncRevision((n) => n + 1);
+      if (revision !== mailRequest.current) {
+        void refreshMail(false);
+        return;
+      }
       setMail(next);
       setMailQuery(next.query);
       setMailBatch(next.max_messages_per_run);
@@ -236,6 +285,7 @@ export default function SettingsView({
         `Gmail sync ${next.enabled ? 'on' : 'off'}; Calendar sync ${next.calendar_enabled ? 'on' : 'off'}; applications from confirmation emails ${next.auto_create_applications ? 'on' : 'off'}. Mail and calendar access stay read only.`,
       );
     } catch (e) {
+      if (e instanceof ApiError && e.status === 401) expireSession();
       setMailError(syncFailure(e, 'Could not save sync settings.'));
     } finally {
       setMailBusy(false);
@@ -243,17 +293,19 @@ export default function SettingsView({
   }
 
   async function syncMailNow() {
+    if (!sessionActive || !mail || mailBusy) return;
     setMailBusy(true);
     setMailError('');
     try {
       await runCorrespondenceSync();
       setMailMsg('Sync queued. Results appear here and in Contacts within a minute.');
-      setTimeout(() => {
-        readCorrespondence()
-          .then(setMail)
-          .catch(() => undefined);
+      clearTimeout(syncTimer.current);
+      syncTimer.current = setTimeout(() => {
+        void refreshMail(false);
+        setSyncRevision((n) => n + 1);
       }, 5000);
     } catch (e) {
+      if (e instanceof ApiError && e.status === 401) expireSession();
       setMailError(syncFailure(e, 'Sync could not be queued.'));
     } finally {
       setMailBusy(false);
@@ -503,16 +555,32 @@ export default function SettingsView({
 
       {/* ===== Integrations ===== */}
       <Section title="Integrations">
-        <p className="mb-3 text-xs text-slate-500">Connect external services.</p>
-
-        <LocalSessionCard onChange={setSessionActive} />
-        <GoogleConnectionCard sessionActive={sessionActive} result={googleResult} />
+        <LocalSessionCard
+          sessionActive={sessionActive}
+          focusUnlock={sessionExpired}
+          onChange={applySession}
+        />
+        {sessionExpired && (
+          <p role="alert" className="mb-3 text-sm text-amber-800">
+            Your integrations session expired. Enter the setup code above to unlock it again.
+          </p>
+        )}
+        <GoogleConnectionCard
+          sessionActive={sessionActive}
+          result={googleResult}
+          syncRevision={syncRevision}
+          onSessionExpired={expireSession}
+          onConnectionChanged={connectionChanged}
+        />
 
         {/* Google Calendar (read-only sync, backend-backed) */}
         <IntegrationCard
           name="Google Calendar (read-only sync)"
           description="Log upcoming events for review. Nothing is created, edited, or accepted."
           enabled={mail?.calendar_enabled ?? false}
+          locked={!sessionActive || !mail || mailBusy}
+          canEnable={Boolean(mail?.calendar_live_enabled && mail.calendar_credentials_present)}
+          toggleLabel="Enable Calendar sync"
           onToggle={(v) => void saveMail({ calendar_enabled: v })}
         >
           <label className="block text-xs sm:w-48">
@@ -541,16 +609,21 @@ export default function SettingsView({
           )}
         </IntegrationCard>
         {mail && !(mail.calendar_live_enabled && mail.calendar_credentials_present) && (
-          <p className="-mt-2 mb-3 text-[11px] text-amber-700">
-            Calendar sync is switched off in this release and cannot be enabled from here yet.
+          <p className="-mt-2 mb-3 text-xs text-amber-800">
+            {mail.calendar_live_enabled
+              ? 'Calendar sync needs credentials with read access to Calendar.'
+              : 'Calendar sync is switched off in this installation.'}
           </p>
         )}
 
         {/* Gmail (read-only sync, backend-backed) */}
         <IntegrationCard
           name="Gmail (read-only sync)"
-          description="Import matching mail as inbound communications. Nothing is ever sent or labeled."
+          description="Import matching messages from Gmail for review. NextUp requests read-only access."
           enabled={mail?.enabled ?? false}
+          locked={!sessionActive || !mail || mailBusy}
+          canEnable={Boolean(mail?.live_enabled && mail.credentials_present)}
+          toggleLabel="Enable Gmail sync"
           onToggle={(v) => void saveMail({ enabled: v })}
         >
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
@@ -618,13 +691,23 @@ export default function SettingsView({
           {mail?.last_error && <p className="mt-1 text-xs text-red-600">{mail.last_error}</p>}
         </IntegrationCard>
         {mail && !(mail.live_enabled && mail.credentials_present) && (
-          <p className="-mt-2 mb-3 text-[11px] text-amber-700">
-            Gmail sync is switched off in this release and cannot be enabled from here yet. Only
-            read-only scopes are ever requested.
+          <p className="-mt-2 mb-3 text-xs text-amber-800">
+            {mail.live_enabled
+              ? 'Gmail sync needs credentials with read access to Gmail.'
+              : 'Gmail sync is switched off in this installation.'}
           </p>
         )}
         {mailMsg && <p className="-mt-2 mb-3 text-xs text-emerald-700">{mailMsg}</p>}
-        {mailError && <p className="-mt-2 mb-3 text-xs text-red-600">{mailError}</p>}
+        {mailError && (
+          <p role="alert" className="mb-3 text-xs text-red-700">
+            {mailError}{' '}
+            {!mail && (
+              <button type="button" className="underline" onClick={() => void refreshMail(true)}>
+                Retry sync settings
+              </button>
+            )}
+          </p>
+        )}
 
         {/* CSV Import */}
         <IntegrationCard
@@ -810,17 +893,25 @@ function IntegrationCard({
   description,
   enabled,
   onToggle,
+  locked = false,
+  canEnable = true,
+  toggleLabel,
   children,
 }: {
   name: string;
   description: string;
   enabled: boolean;
   onToggle: (v: boolean) => void;
+  locked?: boolean;
+  canEnable?: boolean;
+  toggleLabel?: string;
   children: React.ReactNode;
 }) {
   return (
-    <div
-      className={`mb-3 rounded-lg border p-4 ${enabled ? 'border-emerald-200 bg-emerald-50/30' : 'border-slate-200'}`}
+    <fieldset
+      disabled={locked}
+      aria-label={name}
+      className={`min-w-0 mb-3 rounded-lg border p-4 ${enabled ? 'border-emerald-200 bg-emerald-50/30' : 'border-slate-200'}`}
     >
       <div className="flex items-center justify-between">
         <div>
@@ -831,6 +922,8 @@ function IntegrationCard({
           <input
             type="checkbox"
             checked={enabled}
+            disabled={!enabled && !canEnable}
+            aria-label={toggleLabel}
             onChange={(e) => onToggle(e.target.checked)}
             className="accent-emerald-600"
           />
@@ -838,6 +931,6 @@ function IntegrationCard({
         </label>
       </div>
       {enabled && <div className="mt-3">{children}</div>}
-    </div>
+    </fieldset>
   );
 }

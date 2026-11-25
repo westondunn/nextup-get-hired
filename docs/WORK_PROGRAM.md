@@ -47,10 +47,10 @@ The exact assignment and any validation model are metadata in each [agent prompt
    in-application first run, fix the Today defect, establish the application accessibility
    baseline, prove the six core workflows with integrations off, then run separately approved
    clean-machine and representative-user validation.
-3. **Google connection:** after #10 evidence, implement #11, add a guarded off-by-default enablement
-   path, extend #12, and perform #14 only with an approved dedicated test Google account containing
-   synthetic mailbox and calendar data.
-4. **Contract and quality work:** evaluate the second mail adapter after #24, decompose
+3. **Google connection:** the connect flow (#10) and lifecycle backend (#11) are complete. Finish
+   the Settings controls (#12) and guarded off-by-default enablement. Perform #14 only with an
+   approved dedicated test Google account containing synthetic mailbox and calendar data.
+4. **Contract and quality work:** the maintainer [accepted deferral of a second mail adapter](https://github.com/westondunn/nextup-get-hired/issues/25#issuecomment-7152825802) after the #24 contract review. Decompose
    correspondence implementation, and schedule the seed, typed-event, and Content/Evidence work
    according to evidence from the core milestone.
 5. **Discovery backlog:** evaluate AI implementation, workflow/API/MCP access, calendar
@@ -65,10 +65,8 @@ parallel only when it does not delay core evidence or weaken the off-by-default 
 | Issue | Next action | Prompt |
 | --- | --- | --- |
 | [#3](https://github.com/westondunn/nextup-get-hired/issues/3) | Refresh the stale integration tracker after child decisions; keep it open | [Tracker reconciliation](prompts/open/03-integration-readiness-tracker.md) |
-| [#11](https://github.com/westondunn/nextup-get-hired/issues/11) | Implement lifecycle, test, reauthorization, disconnect/revocation, and preservation | [Connection lifecycle](prompts/open/11-google-connection-lifecycle.md) |
-| [#12](https://github.com/westondunn/nextup-get-hired/issues/12) | Extend the existing card after #11; do not rebuild PR #56 | [Settings lifecycle](prompts/open/12-google-settings-lifecycle.md) |
-| [#14](https://github.com/westondunn/nextup-get-hired/issues/14) | Keep blocked through #11, #12, guarded enablement, and live-account approval | [Clean-machine Google validation](prompts/open/14-google-clean-machine-validation.md) |
-| [#25](https://github.com/westondunn/nextup-get-hired/issues/25) | Review the [merged evaluation](https://github.com/westondunn/nextup-get-hired/pull/76) recommending deferral of a second adapter. | [Second-adapter evaluation](prompts/open/25-second-email-adapter-evaluation.md) |
+| [#12](https://github.com/westondunn/nextup-get-hired/issues/12) | Verify the lifecycle controls in the existing Settings card against the [merged backend](https://github.com/westondunn/nextup-get-hired/pull/78) | [Settings lifecycle](prompts/open/12-google-settings-lifecycle.md) |
+| [#14](https://github.com/westondunn/nextup-get-hired/issues/14) | Keep blocked through #12, guarded enablement, and live-account approval | [Clean-machine Google validation](prompts/open/14-google-clean-machine-validation.md) |
 
 ## Proposed issue drafts
 

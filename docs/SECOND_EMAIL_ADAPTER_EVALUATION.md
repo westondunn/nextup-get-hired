@@ -1,6 +1,6 @@
 # Second read-only email adapter evaluation
 
-**Recommendation for #25: defer implementation.** Microsoft Graph offers the clearest documented read-only grant for a body-bearing import. The public record does not identify a NextUp user who needs one of these specific mailbox configurations, and NextUp still lacks the mailbox identity and checkpoint handling needed to demonstrate safe coexistence with Gmail. This is a recommendation for maintainer review. [Issue #25][issue] · [Accepted correspondence contract][contract]
+**The maintainer accepted deferral of a second mail adapter in #25.** Microsoft Graph offers the clearest documented read-only grant for a body-bearing import. The public record does not identify a NextUp user who needs one of these specific mailbox configurations, and NextUp still lacks the mailbox identity and checkpoint handling needed to demonstrate safe coexistence with Gmail. [Issue #25][issue] · [Accepted correspondence contract][contract]
 
 The evaluation covers **Correspondence: read** at [`0fd9646`][baseline]. The implemented baseline is Gmail API with `gmail.readonly`, **Implemented, disabled** and support status **None**. Its worker still keys messages by source and provider ID without a mailbox namespace, and it can miss late arrivals or a listing continuation. The other-mailboxes matrix row is **Not implemented**, support status **None**. [Gmail mapping][mapping] · [Integration matrix][matrix]
 
@@ -36,6 +36,8 @@ Sequence numbers can change after an expunge. A UID is meaningful within a folde
 JMAP Session identifies accounts and capabilities. Within the selected account, `Email/query` lists IDs, `Email/get` fetches selected fields, and `Email/changes` reports created, updated and destroyed IDs. A message can belong to multiple folders under the same Email ID. Follow paged changes, rescan when the server returns `cannotCalculateChanges`, and keep local rows and user edits after destruction. Test reconnect to the same account, ambiguity after an account change, and provider-specific limits. [JMAP Core][jmap-core] · [JMAP for Mail][jmap-mail]
 
 ## Decision
+
+On November 24, 2026 the maintainer accepted deferral and [closed the evaluation](https://github.com/westondunn/nextup-get-hired/issues/25#issuecomment-7152825802).
 
 For all three candidates, a prospective adapter would keep refresh tokens or revocable API tokens encrypted on the NextUp server with a separate restricted key. No NextUp credential was created or stored for this review. Exclude password-only configurations. During setup and sync, provider requests go only to that provider's identified authorization and mail services. Bounded message data flows to local records, with no mailbox writes or other processor. Reconnect must prove the same mailbox before reusing its namespace. Retain ambiguous legacy rows and leave ambiguous classifier hints unapplied. Preserve the user's edits, links and detection on retries, disconnect and provider changes. These are implementation requirements. This evaluation used public documents only and ran no protocol, live-account or conformance tests. [Contract][contract] · [Credential storage precedent][storage]
 

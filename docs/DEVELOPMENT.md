@@ -48,14 +48,31 @@ python3 scripts/local.py --env dev stop      # stop; data is kept
 ```
 
 - `start` creates `.env.dev` from `env/dev.env.example` and generates database passwords as files under `.secrets/dev/`. Neither is committed.
-- `start` also generates `.secrets/dev/setup_code`, the code that starts a local session (`POST /api/session`). An installation created before this file existed gets it on its next `start`. Changing or running mail and calendar sync requires that session; enter the code under Settings, Integrations. So do the routes that save and report a Google client, and the route that starts a Google connection. The address Google sends the browser back to (`GET /api/google/callback`) cannot require one; it completes only a connection that a session started. No other route requires one. See [decisions/0001-local-session-boundary.md](decisions/0001-local-session-boundary.md).
-- `start` also generates `.secrets/dev/token_key`, the key that encrypts the credentials of a stored Google connection. Only the `api` and `worker` services receive it. No connection can be made in a development stack yet. The routes exist: one saves the client ID and secret of a Google client (`PUT /api/google/client`), one sends the browser to Google's consent screen (`POST /api/google/connect`), and one receives the answer and stores the grant (`GET /api/google/callback`). All of them refuse while both sync settings are off, and the launcher does not yet accept them switched on. Settings has a card for them, under Integrations, which for that reason reports that no Google account can be connected. They have been tested with simulated Google responses only. Sync uses a stored connection when one exists, and otherwise the three Google secrets in configuration if all are present. Losing or replacing the key makes a stored connection unreadable. Local-session users can still remove it through `DELETE /api/google/connection`. The [lifecycle API and troubleshooting notes](decisions/0003-google-connection.md#lifecycle-api-and-troubleshooting) cover checking a saved grant, reauthorizing, explicit sync restart and unconfirmed revocation. Staging has no such key. See [decisions/0003-google-connection.md](decisions/0003-google-connection.md).
+- `start` also generates `.secrets/dev/setup_code`, the code that starts a local session (`POST /api/session`). An installation created before this file existed gets it on its next `start`. Changing or running mail and calendar sync requires that session; enter the code under Settings, Integrations. The session also protects saving the Google client, reading connection status, starting or renewing consent, testing the grant and disconnecting. Google returns the browser to `GET /api/google/callback`, which completes only a flow started by that session. See [decisions/0001-local-session-boundary.md](decisions/0001-local-session-boundary.md).
+- `start` generates `.secrets/dev/token_key` for the encrypted Google client and grant. Only the API and worker receive the key. Staging refuses it. The launcher keeps both sync flags off. The [Google Settings walkthrough](#google-connection-in-settings) describes the controls and their behavior with synthetic data.
 - `start` never migrates. Until `migrate` has initialised the schema, the services refuse to work. The same applies after an update that adds a migration revision: the services refuse with `NXG-L03` until `migrate` has been run again. `migrate` shows a read-only plan first and applies it only after you type the confirmation code it prints.
 - The API and the web interface are published on the loopback interface only, by default on ports 18000 and 15173.
 - Open them as `127.0.0.1` or `localhost`. The API answers `400` to any other host name, and `403` to a state-changing request that a browser reports as coming from another origin. A proxy in front of the API must forward the browser's `Host` header unchanged, as `frontend/vite.config.ts` does. See [decisions/0001-local-session-boundary.md](decisions/0001-local-session-boundary.md).
 - There is no command that removes data volumes.
 
 **The API has no authentication. Do not publish these ports on a network.**
+
+### Google connection in Settings
+
+Open **Settings → Integrations** and unlock the session with the installation's setup code. A shipped installation reports that Gmail and Calendar are switched off. The following controls were exercised with synthetic API responses. The clean-machine setup and live-provider checks belong to [#14](https://github.com/westondunn/nextup-get-hired/issues/14).
+
+- In an eligible installation, save the Web application client and register the callback address shown in your own Settings. Its port depends on the installation. Select the read-only capabilities and start consent. Reauthorization uses the same Google consent screen.
+- Check the report for each capability. The installation can enable a capability that the account has yet to grant. A sync attempt, a successful sync, and a connection test are separate events. The card reports when success is unknown, current or stale.
+- **Test connection** checks only the enabled capabilities included in the saved grant. A successful test imports nothing. For a missing scope or revoked grant, reauthorize. For an administrator restriction, contact the account administrator. Retry a temporary outage later.
+- **Disconnect** asks for confirmation, removes the saved client and grant, and pauses both syncs. Imported records and edits are preserved. An unconfirmed revocation includes instructions to check third-party access in Google Account. Credentials supplied through installation configuration are managed there. Resuming sync requires an explicit settings change.
+
+The synthetic example shows Gmail access with a stale sync and Calendar access still to request.
+
+![Google connection in Settings showing the Gmail and Calendar reports, Test connection, Disconnect, and Reauthorize controls](images/google-connection-settings.png)
+
+Disconnect opens a confirmation with keyboard focus on **Cancel**. Escape returns to the Disconnect control.
+
+![Disconnect confirmation explaining that imported records and edits are kept, with visible keyboard focus on Cancel](images/google-disconnect-confirmation.png)
 
 ## External integrations
 

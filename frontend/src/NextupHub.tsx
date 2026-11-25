@@ -68,7 +68,7 @@ const NAV_ITEMS: { label: string; icon: typeof LayoutDashboard; page: Page }[] =
 export default function NextupHub() {
   // A Google consent flow ends with a redirect to `/?google=<word>`. The word is read once,
   // removed from the address bar, and shown in Settings.
-  const [googleResult] = useState(takeGoogleResult);
+  const [googleResult, setGoogleResult] = useState(takeGoogleResult);
   const [page, setPage] = useState<Page>(googleResult ? 'settings' : 'today');
   const [unread, setUnread] = useState(0);
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -93,6 +93,7 @@ export default function NextupHub() {
   }, []);
 
   function navigate(p: string) {
+    if (p !== 'settings') setGoogleResult(null);
     setPage(p as Page);
     setSidebarOpen(false);
     window.scrollTo(0, 0);
@@ -107,6 +108,7 @@ export default function NextupHub() {
         <span className="text-lg font-semibold text-white">Nextup</span>
         <button
           type="button"
+          aria-label="Close navigation"
           onClick={() => setSidebarOpen(false)}
           className="ml-auto rounded p-1 text-slate-400 hover:text-white lg:hidden"
         >
@@ -142,7 +144,6 @@ export default function NextupHub() {
           </div>
           <div className="flex-1">
             <p className="text-sm font-medium text-white">Local Workspace</p>
-            <p className="text-xs text-slate-400">All data stays here</p>
           </div>
           <ChevronDown className="h-4 w-4 text-slate-400" />
         </div>
@@ -178,6 +179,8 @@ export default function NextupHub() {
             <div className="flex items-center gap-3">
               <button
                 type="button"
+                aria-label="Open navigation"
+                aria-expanded={sidebarOpen}
                 onClick={() => setSidebarOpen(true)}
                 className="rounded-lg border border-slate-300 p-2 text-slate-700 hover:bg-slate-100 lg:hidden"
               >
