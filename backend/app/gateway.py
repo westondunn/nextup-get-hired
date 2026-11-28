@@ -12,7 +12,9 @@ from starlette.responses import JSONResponse
 from starlette.types import ASGIApp, Receive, Scope, Send
 
 from app.config import get_settings
+from app.gateway_origin import GatewayOrigin
 from app.guard.errors import SecretFileError
+from app.request_boundary import GATEWAY_ORIGIN_SCOPE_KEY
 from app.secrets_files import read_secret_file
 
 POLICY_PATH = "/run/secrets/nextup_gateway_policy"
@@ -23,23 +25,30 @@ MAX_LIFETIME_SECONDS = 120
 COMPACT_JWS = re.compile(rb"(?:[A-Za-z0-9_-]+\.){2}[A-Za-z0-9_-]+")
 
 
+def _unique_fields(pairs: list[tuple[str, object]]) -> dict[str, object]:
+    fields = dict(pairs)
+    if len(fields) != len(pairs):
+        raise ValueError
+    return fields
+
+
 @dataclass(frozen=True, repr=False)
 class GatewayPolicy:
     issuer: str
     audience: str
     subject: str
     public_key: rsa.RSAPublicKey
+    external_origin: GatewayOrigin | None = None
 
     @classmethod
     def from_json(cls, text: str) -> "GatewayPolicy":
         try:
-            fields = json.loads(text)
-            if not isinstance(fields, dict) or fields.keys() != {
-                "issuer",
-                "audience",
-                "subject",
-                "public_key",
-            }:
+            fields = json.loads(text, object_pairs_hook=_unique_fields)
+            required = {"issuer", "audience", "subject", "public_key"}
+            if not isinstance(fields, dict) or fields.keys() not in (
+                required,
+                required | {"external_origin"},
+            ):
                 raise ValueError
             for name in ("issuer", "audience", "subject"):
                 value = fields[name]
@@ -56,9 +65,14 @@ class GatewayPolicy:
             key = serialization.load_pem_public_key(pem.encode("ascii"))
             if not isinstance(key, rsa.RSAPublicKey) or key.key_size < 2048:
                 raise ValueError
+            origin = (
+                GatewayOrigin.parse(fields["external_origin"])
+                if "external_origin" in fields
+                else None
+            )
         except (ValueError, TypeError, RecursionError, UnsupportedAlgorithm):
             raise RuntimeError("Invalid staging gateway policy.") from None
-        return cls(fields["issuer"], fields["audience"], fields["subject"], key)
+        return cls(fields["issuer"], fields["audience"], fields["subject"], key, origin)
 
     def verified_subject(self, assertion: bytes) -> str | None:
         """Return a subject only after verifying the dedicated token type, key and claims."""
@@ -121,9 +135,12 @@ class GatewayAssertionMiddleware:
 
         # The wrapped NextUp app still enforces its own Host, Origin and local-session rules.
         filtered_headers = [
-            (name, value) for name, value in headers if name.lower() != ASSERTION_HEADER
+            (name.lower(), value) for name, value in headers if name.lower() != ASSERTION_HEADER
         ]
-        await self.app({**scope, "headers": filtered_headers}, receive, send)
+        verified_scope = {**scope, "headers": filtered_headers}
+        if self.policy.external_origin is not None:
+            verified_scope[GATEWAY_ORIGIN_SCOPE_KEY] = self.policy.external_origin
+        await self.app(verified_scope, receive, send)
 
 
 def create_app() -> ASGIApp:

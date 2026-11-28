@@ -22,6 +22,7 @@ from redis import Redis
 from redis.exceptions import RedisError
 
 from app.config import get_settings
+from app.request_boundary import GATEWAY_ORIGIN_SCOPE_KEY
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/session", tags=["session"])
@@ -144,7 +145,12 @@ def read_session(request: Request, store: Store):
 
 
 @router.post("", status_code=204)
-def start_session(code: Annotated[str, Depends(_submitted_code)], response: Response, store: Store):
+def start_session(
+    code: Annotated[str, Depends(_submitted_code)],
+    request: Request,
+    response: Response,
+    store: Store,
+):
     expected = _setup_code()
     if expected is None:
         raise HTTPException(503, NOT_CONFIGURED)
@@ -156,12 +162,12 @@ def start_session(code: Annotated[str, Depends(_submitted_code)], response: Resp
         identifier = store.create(time.time())
     except RedisError:
         raise _unavailable() from None
-    # No Secure attribute: the application is served over plain HTTP on loopback only.
     response.set_cookie(
         COOKIE_NAME,
         identifier,
         max_age=MAX_SECONDS,
         path=COOKIE_PATH,
+        secure=GATEWAY_ORIGIN_SCOPE_KEY in request.scope,
         httponly=True,
         samesite="strict",
     )
@@ -175,4 +181,10 @@ def end_session(request: Request, response: Response, store: Store):
             store.end(identifier)
         except RedisError:
             raise _unavailable() from None
-    response.delete_cookie(COOKIE_NAME, path=COOKIE_PATH, httponly=True, samesite="strict")
+    response.delete_cookie(
+        COOKIE_NAME,
+        path=COOKIE_PATH,
+        secure=GATEWAY_ORIGIN_SCOPE_KEY in request.scope,
+        httponly=True,
+        samesite="strict",
+    )

@@ -19,9 +19,9 @@ Keep loopback as the default. Introduce a separate, explicitly enabled staging d
 
 ## Backend verification available for review
 
-The alternate ASGI factory `app.gateway:create_app` wraps the staging runtime API. Its startup guard, loopback Host rules, Origin checks and setup-code sessions still apply. The shipped Compose files use the original entrypoint.
+The alternate ASGI factory `app.gateway:create_app` wraps the staging runtime API. The factory verifies the gateway assertion before applying the HTTP request checks. The database startup guard and the setup-code session for sensitive operations still apply. The shipped Compose files use the original loopback entrypoint.
 
-The factory reads its policy at startup from `/run/secrets/nextup_gateway_policy`. Supply one UTF-8 JSON line, at most 4,096 bytes, with exactly four string fields. The file must be owned by UID 0 and readable by the runtime. Use mode `0440` with the runtime's group and a regular file at the fixed path. Encode PEM line breaks as JSON escapes.
+The factory reads its policy at startup from `/run/secrets/nextup_gateway_policy`. Supply one UTF-8 JSON line, at most 4,096 bytes, with four required string fields and an optional `external_origin` string. The file must be owned by UID 0 and readable by the runtime. Use mode `0440` with the runtime's group and a regular file at the fixed path. Encode PEM line breaks as JSON escapes.
 
 | Policy field | Value |
 | --- | --- |
@@ -29,12 +29,17 @@ The factory reads its policy at startup from `/run/secrets/nextup_gateway_policy
 | `audience` | Exact expected `aud` string for this API |
 | `subject` | Exact `sub` identifying the single authorized operator |
 | `public_key` | PEM-encoded RSA public verification key of at least 2,048 bits |
+| `external_origin` (optional) | One HTTPS origin with a DNS hostname and optional port, for example `https://staging.example.test:8443` |
 
 Each HTTP request requires one `X-NextUp-Gateway-Assertion` header containing a compact RS256 JWT of at most 8,192 bytes, with type `nextup-gateway+jwt`. The issuer must supply integer `iat` and `exp` claims with a positive lifetime of at most 120 seconds. The verifier checks expiry and any `nbf` against its clock with zero leeway. It rejects an invalid assertion with 401 and a verified assertion for another operator with 403. It removes the assertion header before forwarding an authorized request.
 
+Omitting `external_origin` keeps the existing loopback Host and Origin checks. When it is present, a verified request must carry exactly one Host matching the configured hostname and effective port. Omitting the port and specifying 443 are equivalent for HTTPS. Supply the origin without a path, trailing slash, query, or fragment. Forwarded headers cannot select the origin.
+
+In this mode POST, PUT, PATCH and DELETE also require one matching HTTPS Origin. If present, Fetch Metadata must permit the request. Framework redirects use the validated HTTPS scheme. Setup-code session cookies are host-only, Secure, HttpOnly and SameSite=Strict. The Google consent initiation and callback paths are unavailable through this mode. The operator still needs the local setup code for protected operations.
+
 For the alternate factory, run `python -m app.gateway_probe` inside the API container. It sends an unsigned request to the fixed loopback address and exits successfully only when `/api/live` returns the gateway's expected 401 response. A 200 from the default entrypoint fails this check. The probe needs no signing key or operator session and emits no response content. Use a container health-check timeout longer than its three-second socket timeout.
 
-This check establishes that the API event loop responds and its authentication middleware refuses anonymous requests. Authorized traffic, dependencies and browser sign-in need their own checks. The shipped Compose health check still expects the default entrypoint's 200. Wiring the alternate probe into gateway-specific packaging, implementing sign-in and assertion issuance, protecting the frontend, validating the exact external origin and completing end-to-end tests are prerequisites for deployment.
+This check establishes that the API event loop responds and its authentication middleware refuses anonymous requests. Authorized traffic, dependencies and browser sign-in need their own checks. The shipped Compose health check still expects the default entrypoint's 200. Wiring the alternate probe into gateway-specific packaging, implementing sign-in and assertion issuance, protecting the frontend, terminating TLS at the gateway and completing end-to-end tests are prerequisites for deployment.
 
 ## Acceptance evidence required before enabling
 
