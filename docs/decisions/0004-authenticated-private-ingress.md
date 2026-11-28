@@ -32,7 +32,9 @@ The factory reads its policy at startup from `/run/secrets/nextup_gateway_policy
 
 Each HTTP request requires one `X-NextUp-Gateway-Assertion` header containing a compact RS256 JWT of at most 8,192 bytes, with type `nextup-gateway+jwt`. The issuer must supply integer `iat` and `exp` claims with a positive lifetime of at most 120 seconds. The verifier checks expiry and any `nbf` against its clock with zero leeway. It rejects an invalid assertion with 401 and a verified assertion for another operator with 403. It removes the assertion header before forwarding an authorized request.
 
-The wrapper also protects `/api/live`. The current Compose liveness probe sends an unsigned request and would receive 401 from this factory. A private probe, gateway sign-in and assertion issuance, frontend protection, exact external-origin handling and end-to-end tests are prerequisites for deployment.
+For the alternate factory, run `python -m app.gateway_probe` inside the API container. It sends an unsigned request to the fixed loopback address and exits successfully only when `/api/live` returns the gateway's expected 401 response. A 200 from the default entrypoint fails this check. The probe needs no signing key or operator session and emits no response content. Use a container health-check timeout longer than its three-second socket timeout.
+
+This check establishes that the API event loop responds and its authentication middleware refuses anonymous requests. Authorized traffic, dependencies and browser sign-in need their own checks. The shipped Compose health check still expects the default entrypoint's 200. Wiring the alternate probe into gateway-specific packaging, implementing sign-in and assertion issuance, protecting the frontend, validating the exact external origin and completing end-to-end tests are prerequisites for deployment.
 
 ## Acceptance evidence required before enabling
 
