@@ -14,7 +14,7 @@ from fastapi import FastAPI, Request, WebSocket
 from fastapi.testclient import TestClient
 from starlette.websockets import WebSocketDisconnect
 
-from app import gateway, guard, main
+from app import gateway, guard, local_session, main
 from app.local_session import SESSION_REQUIRED
 from app.request_boundary import CROSS_ORIGIN_REFUSED, HOST_REFUSED
 from app.secrets_files import read_secret_file
@@ -25,6 +25,8 @@ AUDIENCE = "nextup-test-gateway"
 OPERATOR = "synthetic-operator"
 LOOPBACK = "http://127.0.0.1:28000"
 POLICY_FILE = "/run/secrets/nextup_gateway_policy"
+EXTERNAL_HOST = "workspace.example.test"
+EXTERNAL_ORIGIN = "https://" + EXTERNAL_HOST
 
 
 @pytest.fixture(scope="module")
@@ -297,3 +299,172 @@ def test_factory_reads_only_a_protected_single_line_policy(
         with pytest.raises(RuntimeError) as error:
             gateway.create_app()
         assert str(error.value) == "Cannot read the staging gateway policy."
+
+
+@pytest.fixture
+def origin_app(monkeypatch, policy_text):
+    set_identity(monkeypatch, "staging", "runtime")
+
+    def create(origin):
+        policy = json.loads(policy_text)
+        policy["external_origin"] = origin
+        monkeypatch.setattr(gateway, "read_secret_file", Mock(return_value=json.dumps(policy)))
+        return gateway.create_app()
+
+    return create
+
+
+@pytest.fixture
+def external_client(origin_app, key):
+    # The upstream hop can be plain HTTP. The gateway must preserve the browser's Host.
+    return TestClient(
+        origin_app(EXTERNAL_ORIGIN),
+        base_url="http://" + EXTERNAL_HOST,
+        headers={HEADER: issued(key)},
+    )
+
+
+@pytest.mark.parametrize(
+    "origin",
+    [
+        None,
+        "",
+        42,
+        "http://workspace.example.test",
+        "https://*.example.test",
+        "https://127.0.0.1",
+        "https://[::1]",
+        "https://example.0x7f",
+        "https://bad_label.example.test",
+        "https://operator@workspace.example.test",
+        EXTERNAL_ORIGIN + "/",
+        EXTERNAL_ORIGIN + "/path",
+        EXTERNAL_ORIGIN + "?query",
+        EXTERNAL_ORIGIN + "#fragment",
+        EXTERNAL_ORIGIN + ":0",
+        EXTERNAL_ORIGIN + ":0443",
+        EXTERNAL_ORIGIN + ":65536",
+    ],
+)
+def test_invalid_external_origin_fails_startup(origin_app, origin):
+    with pytest.raises(RuntimeError, match=r"^Invalid staging gateway policy\.$"):
+        origin_app(origin)
+
+
+def test_duplicate_external_origin_fields_are_ambiguous(policy_text, monkeypatch):
+    policy = policy_text[:-1] + (
+        ',"external_origin":"https://first.example.test",'
+        '"external_origin":"https://second.example.test"}'
+    )
+    set_identity(monkeypatch, "staging", "runtime")
+    monkeypatch.setattr(gateway, "read_secret_file", Mock(return_value=policy))
+    with pytest.raises(RuntimeError, match=r"^Invalid staging gateway policy\.$"):
+        gateway.create_app()
+
+
+@pytest.mark.parametrize(
+    ("configured", "host", "origin"),
+    [
+        (EXTERNAL_ORIGIN, EXTERNAL_HOST, EXTERNAL_ORIGIN + ":443"),
+        (EXTERNAL_ORIGIN + ":443", EXTERNAL_HOST + ":443", EXTERNAL_ORIGIN),
+        (EXTERNAL_ORIGIN + ":8443", EXTERNAL_HOST + ":8443", EXTERNAL_ORIGIN + ":8443"),
+        (EXTERNAL_ORIGIN, EXTERNAL_HOST.upper(), EXTERNAL_ORIGIN.upper()),
+    ],
+)
+def test_matching_effective_https_origin_reaches_handler(
+    origin_app, key, configured, host, origin, monkeypatch
+):
+    store = Mock(spec=local_session.SessionStore)
+    monkeypatch.setitem(main.app.dependency_overrides, local_session.get_store, lambda: store)
+    client = TestClient(origin_app(configured))
+    response = client.delete(
+        "/api/session",
+        headers={
+            HEADER: issued(key),
+            "Host": host,
+            "Origin": origin,
+            "Sec-Fetch-Site": "same-origin",
+            "Cookie": "nextup_session=synthetic-session",
+        },
+    )
+    assert response.status_code == 204
+    store.end.assert_called_once_with("synthetic-session")
+
+
+@pytest.mark.parametrize(
+    "hosts",
+    [
+        ["127.0.0.1:28000"],
+        [EXTERNAL_HOST + ":8443"],
+        ["another.example.test"],
+        [EXTERNAL_HOST, EXTERNAL_HOST],
+        [EXTERNAL_HOST + ", " + EXTERNAL_HOST],
+    ],
+)
+def test_gateway_requires_one_matching_host_even_with_forwarding_headers(external_client, hosts):
+    headers = [("Host", host) for host in hosts]
+    headers += [
+        ("Forwarded", f"host={EXTERNAL_HOST};proto=https"),
+        ("X-Forwarded-Host", EXTERNAL_HOST),
+        ("X-Forwarded-Proto", "https"),
+    ]
+    response = external_client.get("/api/live", headers=headers)
+    assert response.status_code == 400 and response.json() == {"detail": HOST_REFUSED}
+
+
+@pytest.mark.parametrize(
+    "browser_headers",
+    [
+        [],
+        [("Origin", "http://" + EXTERNAL_HOST)],
+        [("Origin", "https://other.example.test")],
+        [("Origin", EXTERNAL_ORIGIN + ":8443")],
+        [("Origin", "null")],
+        [("Origin", EXTERNAL_ORIGIN + "/path")],
+        [("Origin", EXTERNAL_ORIGIN), ("Origin", EXTERNAL_ORIGIN)],
+        [("Origin", EXTERNAL_ORIGIN), ("Sec-Fetch-Site", "cross-site")],
+        [("Origin", EXTERNAL_ORIGIN), ("Sec-Fetch-Site", "same-site")],
+        [("Origin", EXTERNAL_ORIGIN), ("Sec-Fetch-Site", "none"), ("Sec-Fetch-Site", "none")],
+        [("X-Forwarded-Host", EXTERNAL_HOST), ("X-Forwarded-Proto", "https")],
+    ],
+)
+def test_gateway_refuses_invalid_write_before_session_change(
+    external_client, browser_headers, monkeypatch
+):
+    store = Mock(spec=local_session.SessionStore)
+    monkeypatch.setitem(main.app.dependency_overrides, local_session.get_store, lambda: store)
+    response = external_client.delete(
+        "/api/session", headers=[*browser_headers, ("Cookie", "nextup_session=synthetic-session")]
+    )
+    assert response.status_code == 403 and response.json() == {"detail": CROSS_ORIGIN_REFUSED}
+    store.end.assert_not_called()
+
+
+def test_origin_policy_is_scoped_to_one_verified_gateway(external_client, client, key):
+    host = {"Host": EXTERNAL_HOST}
+    assert external_client.get("/api/live", headers=host).json() == {"status": "up"}
+    guarded = external_client.get("/api/google/connection", headers=host)
+    assert guarded.status_code == 401 and guarded.json() == {"detail": SESSION_REQUIRED}
+    for other in [client, TestClient(main.app)]:
+        response = other.get("/api/live", headers={**host, HEADER: issued(key)})
+        assert response.status_code == 400 and response.json() == {"detail": HOST_REFUSED}
+
+
+def test_router_redirect_preserves_verified_https_origin(external_client):
+    response = external_client.get("/api/live/", follow_redirects=False)
+    assert response.status_code == 307
+    assert response.headers["location"] == EXTERNAL_ORIGIN + "/api/live"
+
+
+def test_unsigned_request_is_refused_before_host_or_origin_checks(origin_app):
+    client = TestClient(origin_app(EXTERNAL_ORIGIN), base_url=LOOPBACK)
+    for method, path in [("GET", "/api/live"), ("POST", "/api/diagnostics")]:
+        response = client.request(method, path)
+        assert response.status_code == 401
+        assert response.json() == {"detail": "Authentication required."}
+
+
+@pytest.mark.parametrize("method", ["POST", "PUT", "PATCH", "DELETE"])
+def test_all_writes_require_an_origin(external_client, method):
+    response = external_client.request(method, "/api/live")
+    assert response.status_code == 403 and response.json() == {"detail": CROSS_ORIGIN_REFUSED}
